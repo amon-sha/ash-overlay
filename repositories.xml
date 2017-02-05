@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+
+<repositories version="1.0">
+	<repo priority="50" quality="experimental" status="unofficial">
+		<name>ash-overlay</name>
+		<source type="git">https://github.com/amon-sha/ash-overlay.git</source>
+	</repo>
+</repositories>
