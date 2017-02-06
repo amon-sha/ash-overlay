@@ -15,8 +15,7 @@ SLOT="0"
 KEYWORDS="~amd64 ~x86"
 IUSE=""
 
-DEPEND="kde-base/kdelibs:4
-	dev-qt/qtcore:4"
+DEPEND="dev-qt/qtcore:4"
 RDEPEND=$DEPEND
 
 S="${WORKDIR}/${P}"
