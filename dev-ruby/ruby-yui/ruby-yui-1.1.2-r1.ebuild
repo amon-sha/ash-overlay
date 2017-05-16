@@ -24,22 +24,15 @@ DEPEND+="${RDEPEND} dev-lang/swig"
 RUBY_S="libyui-bindings-${PV}/swig/ruby"
 
 all_ruby_prepare() {
-	mkdir -p ext/yui lib/yui
-
-	mv yui.rb lib
-	mv extconf.rb ext/yui
-
-	sed '/yui\/version/ d' yui/yui.rb > lib/yui/yui.rb
-	sed "s/@VERSION@/${PV}/" yui.gemspec.in > yui.gemspec
-
-	swig -I/usr/include -c++ -ruby -autorename -o ext/yui/ruby_yui.cxx ../yui.i
+	mkdir -p lib/yui
+	swig -I/usr/include -c++ -ruby -autorename -o ruby_yui.cxx ../yui.i
 }
 
 each_ruby_configure() {
-	ruby -Cext/yui extconf.rb
+	ruby extconf.rb
 }
 
 each_ruby_compile() {
-	emake -Cext/yui V=1
-	mv ext/yui/_yui$(get_modname) lib/yui || die
+	emake V=1
+	mv _yui$(get_modname) lib/yui$(get_modname) || die
 }
