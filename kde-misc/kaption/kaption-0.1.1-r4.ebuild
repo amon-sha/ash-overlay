@@ -19,3 +19,7 @@ DEPEND="dev-qt/qtcore:4"
 RDEPEND=$DEPEND
 
 S="${WORKDIR}/${P}"
+
+src_prepare() {
+	epatch "${FILESDIR}/clipboard_button.patch"
+}
