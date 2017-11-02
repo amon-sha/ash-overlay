@@ -1,3 +1,627 @@
+diff --git a/vmmon-only/common/hostif.h b/vmmon-only/common/hostif.h
+index 7405920..9d4a8b9 100644
+--- a/vmmon-only/common/hostif.h
++++ b/vmmon-only/common/hostif.h
+@@ -67,7 +67,7 @@ typedef enum {
+ } HostIFIPIMode;
+ 
+ EXTERN int   HostIF_Init(VMDriver *vm);
+-EXTERN int   HostIF_LookupUserMPN(VMDriver *vm, VA64 uAddr, MPN64 *mpn);
++EXTERN int   HostIF_LookupUserMPN(VMDriver *vm, VA64 uAddr, MPN *mpn);
+ EXTERN void *HostIF_MapCrossPage(VMDriver *vm, VA64 uAddr);
+ EXTERN void  HostIF_InitFP(VMDriver *vm);
+ 
+@@ -75,10 +75,10 @@ EXTERN void *HostIF_AllocPage(void);
+ EXTERN void  HostIF_FreePage(void *ptr);
+ 
+ EXTERN int   HostIF_LockPage(VMDriver *vm, VA64 uAddr,
+-                             Bool allowMultipleMPNsPerVA, MPN64 *mpn);
++                             Bool allowMultipleMPNsPerVA, MPN *mpn);
+ EXTERN int   HostIF_UnlockPage(VMDriver *vm, VA64 uAddr);
+-EXTERN int   HostIF_UnlockPageByMPN(VMDriver *vm, MPN64 mpn, VA64 uAddr);
+-EXTERN Bool  HostIF_IsLockedByMPN(VMDriver *vm, MPN64 mpn);
++EXTERN int   HostIF_UnlockPageByMPN(VMDriver *vm, MPN mpn, VA64 uAddr);
++EXTERN Bool  HostIF_IsLockedByMPN(VMDriver *vm, MPN mpn);
+ EXTERN void  HostIF_FreeAllResources(VMDriver *vm);
+ EXTERN uint64 HostIF_ReadUptime(void);
+ EXTERN uint64 HostIF_UptimeFrequency(void);
+@@ -86,8 +86,8 @@ EXTERN unsigned int HostIF_EstimateLockedPageLimit(const VMDriver *vm,
+                                                    unsigned int lockedPages);
+ EXTERN void  HostIF_Wait(unsigned int timeoutMs);
+ EXTERN void  HostIF_WaitForFreePages(unsigned int timeoutMs);
+-EXTERN void *HostIF_AllocCrossGDT(uint32 numPages, MPN64 maxValidFirst,
+-                                  MPN64 *crossGDTMPNs);
++EXTERN void *HostIF_AllocCrossGDT(uint32 numPages, MPN maxValidFirst,
++                                  MPN *crossGDTMPNs);
+ EXTERN void  HostIF_FreeCrossGDT(uint32 numPages, void *crossGDT);
+ EXTERN void  HostIF_VMLock(VMDriver *vm, int callerID);
+ EXTERN void  HostIF_VMUnlock(VMDriver *vm, int callerID);
+@@ -118,18 +118,13 @@ EXTERN int HostIF_AllocLockedPages(VMDriver *vm, VA64 addr,
+                                    unsigned int numPages, Bool kernelMPNBuffer);
+ EXTERN int HostIF_FreeLockedPages(VMDriver *vm, VA64 addr,
+                                   unsigned int numPages, Bool kernelMPNBuffer);
+-EXTERN MPN64 HostIF_GetNextAnonPage(VMDriver *vm, MPN64 mpn);
++EXTERN MPN HostIF_GetNextAnonPage(VMDriver *vm, MPN mpn);
+ EXTERN int HostIF_GetLockedPageList(VMDriver *vm, VA64 uAddr,
+                                     unsigned int numPages);
+ 
+-EXTERN int HostIF_ReadPage(MPN64 mpn, VA64 addr, Bool kernelBuffer);
+-EXTERN int HostIF_WritePage(MPN64 mpn, VA64 addr, Bool kernelBuffer);
+-#ifdef _WIN32
+-/* Add a HostIF_ReadMachinePage() if/when needed */
+-EXTERN int HostIF_WriteMachinePage(MPN64 mpn, VA64 addr);
+-#else
+-#define HostIF_WriteMachinePage(_a, _b) HostIF_WritePage((_a), (_b), TRUE)
+-#endif
++EXTERN int HostIF_ReadPage(VMDriver *vm, MPN mpn, VA64 addr, Bool kernelBuffer);
++EXTERN int HostIF_WritePage(VMDriver *vm, MPN mpn, VA64 addr, Bool kernelBuffer);
++EXTERN int HostIF_WriteMachinePage(MPN mpn, VA64 addr);
+ #if defined __APPLE__
+ // There is no need for a fast clock lock on Mac OS.
+ #define HostIF_FastClockLock(_callerID) do {} while (0)
+@@ -140,8 +135,8 @@ EXTERN void HostIF_FastClockUnlock(int callerID);
+ #endif
+ EXTERN int HostIF_SetFastClockRate(unsigned rate);
+ 
+-EXTERN MPN64 HostIF_AllocMachinePage(void);
+-EXTERN void HostIF_FreeMachinePage(MPN64 mpn);
++EXTERN MPN HostIF_AllocMachinePage(void);
++EXTERN void HostIF_FreeMachinePage(MPN mpn);
+ 
+ EXTERN int HostIF_SafeRDMSR(uint32 msr, uint64 *val);
+ 
+diff --git a/vmmon-only/common/memtrack.c b/vmmon-only/common/memtrack.c
+index 84eabf7..ef9277f 100644
+--- a/vmmon-only/common/memtrack.c
++++ b/vmmon-only/common/memtrack.c
+@@ -88,6 +88,7 @@
+ 
+ #include "vmware.h"
+ #include "hostif.h"
++#include "vmx86.h"
+ 
+ #include "memtrack.h"
+ 
+@@ -146,12 +147,11 @@ typedef struct MemTrackHT {
+ typedef uint64 MemTrackHTKey;
+ 
+ typedef struct MemTrack {
++   VMDriver         *vm;            /* The VM instance. */
+    unsigned          numPages;      /* Number of pages tracked. */
+    MemTrackDir1      dir1;          /* First level directory. */
+    MemTrackHT        vpnHashTable;  /* VPN to entry hashtable. */
+-#if defined(MEMTRACK_MPN_LOOKUP)
+    MemTrackHT        mpnHashTable;  /* MPN to entry hashtable. */
+-#endif
+ } MemTrack;
+ 
+ /*
+@@ -304,11 +304,9 @@ MemTrackCleanup(MemTrack *mt)    // IN
+       if (mt->vpnHashTable.pages[idx] != NULL) {
+          HostIF_FreePage(mt->vpnHashTable.pages[idx]);
+       }
+-#if defined(MEMTRACK_MPN_LOOKUP)
+       if (mt->mpnHashTable.pages[idx] != NULL) {
+          HostIF_FreePage(mt->mpnHashTable.pages[idx]);
+       }
+-#endif
+    }
+ 
+    HostIF_FreeKernelMem(mt);
+@@ -332,7 +330,7 @@ MemTrackCleanup(MemTrack *mt)    // IN
+  */
+ 
+ MemTrack *
+-MemTrack_Init(void)
++MemTrack_Init(VMDriver *vm) // IN:
+ {
+    MemTrack *mt;
+    unsigned idx;
+@@ -349,6 +347,7 @@ MemTrack_Init(void)
+       goto error;
+    }
+    memset(mt, 0, sizeof *mt);
++   mt->vm = vm;
+ 
+    for (idx = 0; idx < MEMTRACK_HT_PAGES; idx++) {
+       MemTrackHTPage *htPage = MemTrackAllocPage();
+@@ -360,7 +359,6 @@ MemTrack_Init(void)
+       mt->vpnHashTable.pages[idx] = htPage;
+    }
+ 
+-#if defined(MEMTRACK_MPN_LOOKUP)
+    for (idx = 0; idx < MEMTRACK_HT_PAGES; idx++) {
+       MemTrackHTPage *htPage = MemTrackAllocPage();
+ 
+@@ -370,7 +368,6 @@ MemTrack_Init(void)
+       }
+       mt->mpnHashTable.pages[idx] = htPage;
+    }
+-#endif
+ 
+    return mt;
+ 
+@@ -399,7 +396,7 @@ error:
+ MemTrackEntry *
+ MemTrack_Add(MemTrack *mt,    // IN
+              VPN64 vpn,       // IN
+-             MPN64 mpn)       // IN
++             MPN mpn)         // IN
+ {
+    unsigned idx = mt->numPages;
+    unsigned p1, p2, p3;
+@@ -409,6 +406,8 @@ MemTrack_Add(MemTrack *mt,    // IN
+    MemTrackDir3 *dir3;
+    MEMTRACK_IDX2DIR(idx, p1, p2, p3);
+ 
++   ASSERT(HostIF_VMLockIsHeld(mt->vm));
++
+    if (p1 >= MEMTRACK_DIR1_ENTRIES ||
+        p2 >= MEMTRACK_DIR2_ENTRIES ||
+        p3 >= MEMTRACK_DIR3_ENTRIES) {
+@@ -430,9 +429,7 @@ MemTrack_Add(MemTrack *mt,    // IN
+    ent->mpn = mpn;
+ 
+    MemTrackHTInsert(&mt->vpnHashTable, ent, &ent->vpnChain, ent->vpn);
+-#if defined(MEMTRACK_MPN_LOOKUP)
+    MemTrackHTInsert(&mt->mpnHashTable, ent, &ent->mpnChain, ent->mpn);
+-#endif
+ 
+    mt->numPages++;
+ 
+@@ -461,6 +458,7 @@ MemTrack_LookupVPN(MemTrack *mt, // IN
+                    VPN64 vpn)    // IN
+ {
+    MemTrackEntry *next = *MemTrackHTLookup(&mt->vpnHashTable, vpn);
++   ASSERT(HostIF_VMLockIsHeld(mt->vm));
+ 
+    while (next != NULL) {
+       if (next->vpn == vpn) {
+@@ -473,7 +471,6 @@ MemTrack_LookupVPN(MemTrack *mt, // IN
+ }
+ 
+ 
+-#if defined(MEMTRACK_MPN_LOOKUP)
+ /*
+  *----------------------------------------------------------------------
+  *
+@@ -491,9 +488,11 @@ MemTrack_LookupVPN(MemTrack *mt, // IN
+  */
+ MemTrackEntry *
+ MemTrack_LookupMPN(MemTrack *mt, // IN
+-                   MPN64 mpn)    // IN
++                   MPN mpn)      // IN
+ {
+    MemTrackEntry *next = *MemTrackHTLookup(&mt->mpnHashTable, mpn);
++   ASSERT(HostIF_VMLockIsHeld(mt->vm));
++   next = *MemTrackHTLookup(&mt->mpnHashTable, mpn);
+ 
+    while (next != NULL) {
+       if (next->mpn == mpn) {
+@@ -504,7 +503,6 @@ MemTrack_LookupMPN(MemTrack *mt, // IN
+ 
+    return NULL;
+ }
+-#endif
+ 
+ 
+ /*
+diff --git a/vmmon-only/common/memtrack.h b/vmmon-only/common/memtrack.h
+index c5f4efe..03bd723 100644
+--- a/vmmon-only/common/memtrack.h
++++ b/vmmon-only/common/memtrack.h
+@@ -31,30 +31,22 @@
+ #define INCLUDE_ALLOW_VMCORE
+ #include "includeCheck.h"
+ 
+-#if defined(VMX86_DEBUG)
+-#define MEMTRACK_MPN_LOOKUP
+-#endif
+-
+ struct MemTrack;
+ 
+ typedef struct MemTrackEntry {
+    VPN64                   vpn;
+-   MPN64                   mpn;
++   MPN                     mpn;
+    struct MemTrackEntry   *vpnChain;
+-#if defined(MEMTRACK_MPN_LOOKUP)
+    struct MemTrackEntry   *mpnChain;
+-#endif
+ } MemTrackEntry;
+ 
+ typedef void (MemTrackCleanupCb)(void *cData, MemTrackEntry *entry);
+ 
+-extern struct MemTrack *MemTrack_Init(void);
++extern struct MemTrack *MemTrack_Init(VMDriver *vm);
+ extern unsigned MemTrack_Cleanup(struct MemTrack *mt, MemTrackCleanupCb *cb,
+                                  void *cbData);
+-extern MemTrackEntry *MemTrack_Add(struct MemTrack *mt, VPN64 vpn, MPN64 mpn);
++extern MemTrackEntry *MemTrack_Add(struct MemTrack *mt, VPN64 vpn, MPN mpn);
+ extern MemTrackEntry *MemTrack_LookupVPN(struct MemTrack *mt, VPN64 vpn);
+-#if defined(MEMTRACK_MPN_LOOKUP)
+-extern MemTrackEntry *MemTrack_LookupMPN(struct MemTrack *mt, MPN64 mpn);
+-#endif
++extern MemTrackEntry *MemTrack_LookupMPN(struct MemTrack *mt, MPN mpn);
+ 
+ #endif // _MEMTRACK_H_
+diff --git a/vmmon-only/common/phystrack.c b/vmmon-only/common/phystrack.c
+index ba8eb05..5972e24 100644
+--- a/vmmon-only/common/phystrack.c
++++ b/vmmon-only/common/phystrack.c
+@@ -299,7 +299,7 @@ PhysTrack_Free(PhysTracker *tracker)
+ 
+ void
+ PhysTrack_Add(PhysTracker *tracker, // IN/OUT
+-              MPN64 mpn)            // IN: MPN of page to be added
++              MPN mpn)              // IN: MPN of page to be added
+ {
+    unsigned int p1;
+    unsigned int p2;
+@@ -352,7 +352,7 @@ PhysTrack_Add(PhysTracker *tracker, // IN/OUT
+ 
+ void
+ PhysTrack_Remove(PhysTracker *tracker, // IN/OUT
+-                 MPN64 mpn)            // IN: MPN of page to be removed.
++                 MPN mpn)              // IN: MPN of page to be removed.
+ {
+    unsigned int p1;
+    unsigned int p2;
+@@ -402,7 +402,7 @@ PhysTrack_Remove(PhysTracker *tracker, // IN/OUT
+ 
+ Bool
+ PhysTrack_Test(const PhysTracker *tracker, // IN
+-               MPN64 mpn)                  // IN: MPN of page to be tested.
++               MPN mpn)                    // IN: MPN of page to be tested.
+ {
+    unsigned int p1;
+    unsigned int p2;
+@@ -448,9 +448,9 @@ PhysTrack_Test(const PhysTracker *tracker, // IN
+  *----------------------------------------------------------------------
+  */
+ 
+-MPN64
++MPN
+ PhysTrack_GetNext(const PhysTracker *tracker, // IN
+-                  MPN64 mpn)                  // IN: MPN of page to be tracked.
++                  MPN mpn)                    // IN: MPN of page to be tracked.
+ {
+    unsigned int p1;
+    unsigned int p2;
+diff --git a/vmmon-only/common/phystrack.h b/vmmon-only/common/phystrack.h
+index 760f220..e88c19a 100644
+--- a/vmmon-only/common/phystrack.h
++++ b/vmmon-only/common/phystrack.h
+@@ -40,10 +40,10 @@ struct VMDriver;
+ EXTERN struct PhysTracker *PhysTrack_Alloc(struct VMDriver *vm);
+ EXTERN void PhysTrack_Free(struct PhysTracker *);
+ 
+-EXTERN void PhysTrack_Add(struct PhysTracker *, MPN64);
+-EXTERN void PhysTrack_Remove(struct PhysTracker *, MPN64);
+-EXTERN Bool PhysTrack_Test(const struct PhysTracker *, MPN64);
+-EXTERN MPN64 PhysTrack_GetNext(const struct PhysTracker *, MPN64);
++EXTERN void PhysTrack_Add(struct PhysTracker *, MPN);
++EXTERN void PhysTrack_Remove(struct PhysTracker *, MPN);
++EXTERN Bool PhysTrack_Test(const struct PhysTracker *, MPN);
++EXTERN MPN PhysTrack_GetNext(const struct PhysTracker *, MPN);
+ 
+ #endif
+ 
+diff --git a/vmmon-only/common/task.c b/vmmon-only/common/task.c
+index f444f85..72ecfbb 100644
+--- a/vmmon-only/common/task.c
++++ b/vmmon-only/common/task.c
+@@ -39,6 +39,9 @@
+ #   include <linux/string.h> /* memset() in the kernel */
+ 
+ #   define EXPORT_SYMTAB
++#   if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
++#      define LINUX_GDT_IS_RO
++#   endif
+ #else
+ #   include <string.h>
+ #endif
+@@ -59,6 +62,13 @@
+ #include "x86vtinstr.h"
+ #include "apic.h"
+ 
++#ifdef LINUX_GDT_IS_RO
++#   include <asm/desc.h>
++#   define default_rw_gdt get_current_gdt_rw()
++#else
++#   define default_rw_gdt NULL
++#endif
++
+ #if defined(_WIN64)
+ #   include "x86.h"
+ #   include "vmmon-asm-x86-64.h"
+@@ -73,7 +83,7 @@
+ } while (0)
+ 
+ static CrossGDT *crossGDT = NULL;
+-static MPN64 crossGDTMPNs[CROSSGDT_NUMPAGES];
++static MPN crossGDTMPNs[CROSSGDT_NUMPAGES];
+ static DTR crossGDTDescHKLA;
+ static Selector kernelStackSegment = 0;
+ static uint32 dummyLVT;
+@@ -105,8 +115,8 @@ TaskAllocHVRootPage(Atomic_uint64 *slot) // IN/OUT
+ {
+    uint32 *content;
+    uint64 vmxBasicMSR;
+-   MPN64 mpn;
+-   static const MPN64 invalidMPN = INVALID_MPN;
++   MPN mpn;
++   static const MPN invalidMPN = INVALID_MPN;
+ 
+    ASSERT(slot != NULL);
+ 
+@@ -172,10 +182,10 @@ TaskAllocHVRootPage(Atomic_uint64 *slot) // IN/OUT
+  *-----------------------------------------------------------------------------
+  */
+ 
+-static MPN64
++static MPN
+ TaskGetHVRootPage(Atomic_uint64 *slot) // IN/OUT
+ {
+-   MPN64 mpn = Atomic_Read64(slot);
++   MPN mpn = Atomic_Read64(slot);
+ 
+    if (mpn != INVALID_MPN) {
+       return mpn;
+@@ -207,7 +217,7 @@ TaskGetHVRootPage(Atomic_uint64 *slot) // IN/OUT
+  *-----------------------------------------------------------------------------
+  */
+ 
+-MPN64
++MPN
+ Task_GetHVRootPageForPCPU(uint32 pCPU) // IN
+ {
+    ASSERT(pCPU < ARRAYSIZE(hvRootPage));
+@@ -340,7 +350,7 @@ Task_GetTmpGDT(uint32 pCPU) // IN
+ static void
+ TaskFreeHVRootPages(void)
+ {
+-   MPN64 mpn;
++   MPN mpn;
+    unsigned i;
+ 
+    for (i = 0; i < ARRAYSIZE(hvRootPage); i++) {
+@@ -537,7 +547,7 @@ Task_Initialize(void)
+ {
+    unsigned i;
+ 
+-   ASSERT_ON_COMPILE(sizeof (Atomic_uint64) == sizeof (MPN64));
++   ASSERT_ON_COMPILE(sizeof (Atomic_uint64) == sizeof (MPN));
+    for (i = 0; i < ARRAYSIZE(hvRootPage); i++) {
+       Atomic_Write64(&hvRootPage[i], INVALID_MPN);
+    }
+@@ -708,11 +718,28 @@ TaskRestoreHostGDTTRLDT(Descriptor *tempGDTBase,
+        */
+ 
+       desc = (Descriptor *)((VA)HOST_KERNEL_LA_2_VA(hostGDT64.offset + tr));
++#ifdef LINUX_GDT_IS_RO
++      /*
++       * If GDT is read-only, we must always load TR from alternative gdt,
++       * otherwise CPU gets page fault when marking TR busy.
++       */
++      {
++         DTR64 rwGDT64;
++
++         rwGDT64.offset = (unsigned long)tempGDTBase;
++         rwGDT64.limit = hostGDT64.limit;
++         Desc_SetType((Descriptor *)((unsigned long)tempGDTBase + tr), TASK_DESC);
++         _Set_GDT((DTR *)&rwGDT64);
++         SET_TR(tr);
++         _Set_GDT((DTR *)&hostGDT64);
++      }
++#else
+       if (Desc_Type(desc) == TASK_DESC_BUSY) {
+          Desc_SetType(desc, TASK_DESC);
+       }
+       _Set_GDT((DTR *)&hostGDT64);
+       SET_TR(tr);
++#endif
+       SET_LDT(ldt);
+    }
+ }
+@@ -751,7 +778,7 @@ Task_AllocCrossGDT(InitBlock *initBlock)  // OUT: crossGDT values filled in
+     */
+ 
+    if (crossGDT == NULL) {
+-      MPN64 maxValidFirst =
++      MPN maxValidFirst =
+          0xFFC00 /* 32-bit MONITOR_LINEAR_START */ - CROSSGDT_NUMPAGES;
+ 
+       /*
+@@ -869,7 +896,7 @@ Task_InitCrosspage(VMDriver *vm,          // IN
+    for (vcpuid = 0; vcpuid < initParams->numVCPUs;  vcpuid++) {
+       VA64         crossPageUserAddr = initParams->crosspage[vcpuid];
+       VMCrossPage *p                 = HostIF_MapCrossPage(vm, crossPageUserAddr);
+-      MPN64        crossPageMPN;
++      MPN        crossPageMPN;
+ 
+       if (p == NULL) {
+          return 1;
+@@ -1762,7 +1789,7 @@ Task_Switch(VMDriver *vm,  // IN
+    Bool thermalNMI;
+    VMCrossPage *crosspage = vm->crosspage[vcpuid];
+    uint32 pCPU;
+-   MPN64 hvRootMPN;
++   MPN hvRootMPN;
+    Descriptor *tempGDTBase;
+ 
+    ASSERT_ON_COMPILE(sizeof(VMCrossPage) == PAGE_SIZE);
+@@ -1775,7 +1802,8 @@ Task_Switch(VMDriver *vm,  // IN
+    ASSERT(pCPU < ARRAYSIZE(hvRootPage) && pCPU < ARRAYSIZE(tmpGDT));
+ 
+    hvRootMPN = Atomic_Read64(&hvRootPage[pCPU]);
+-   tempGDTBase = USE_TEMPORARY_GDT ? Atomic_ReadPtr(&tmpGDT[pCPU]) : NULL;
++   tempGDTBase = USE_TEMPORARY_GDT ? Atomic_ReadPtr(&tmpGDT[pCPU])
++                                   : default_rw_gdt;
+ 
+    /*
+     * We can't allocate memory with interrupts disabled on all hosts
+diff --git a/vmmon-only/common/task.h b/vmmon-only/common/task.h
+index ecc4208..b2fcfd9 100644
+--- a/vmmon-only/common/task.h
++++ b/vmmon-only/common/task.h
+@@ -34,7 +34,7 @@ extern int Task_InitCrossGDT(struct InitCrossGDT *initCrossGDT);
+ extern void Task_Switch(VMDriver *vm, Vcpuid vcpuid);
+ extern Bool Task_Initialize(void);
+ extern void Task_Terminate(void);
+-extern MPN64 Task_GetHVRootPageForPCPU(uint32 pCPU);
++extern MPN Task_GetHVRootPageForPCPU(uint32 pCPU);
+ extern Descriptor *Task_GetTmpGDT(uint32 pCPU);
+ 
+ #endif
+diff --git a/vmmon-only/common/vmx86.c b/vmmon-only/common/vmx86.c
+index 306d2bd..81f740c 100644
+--- a/vmmon-only/common/vmx86.c
++++ b/vmmon-only/common/vmx86.c
+@@ -723,6 +723,35 @@ cleanup:
+ /*
+  *----------------------------------------------------------------------
+  *
++ * Vmx86_LookupUserMPN --
++ *
++ *      Look up the MPN of a locked user page by user VA under the VM lock.
++ *
++ * Results:
++ *      A status code and the MPN on success.
++ *
++ * Side effects:
++ *      None
++ *
++ *----------------------------------------------------------------------
++ */
++
++int
++Vmx86_LookupUserMPN(VMDriver *vm, // IN: VMDriver
++                    VA64 uAddr,   // IN: user VA of the page
++                    MPN *mpn)     // OUT
++{
++   int ret;
++   HostIF_VMLock(vm, 38);
++   ret = HostIF_LookupUserMPN(vm, uAddr, mpn);
++   HostIF_VMUnlock(vm, 38);
++   return ret;
++}
++
++
++/*
++ *----------------------------------------------------------------------
++ *
+  * Vmx86_ReleaseVM  --
+  *
+  *      Release a VM (either created here or from a bind).
+@@ -1492,7 +1521,7 @@ int
+ Vmx86_LockPage(VMDriver *vm,                 // IN: VMDriver
+                VA64 uAddr,                   // IN: VA of the page to lock
+                Bool allowMultipleMPNsPerVA,  // IN: allow locking many pages with the same VA
+-               MPN64 *mpn)                   // OUT
++               MPN *mpn)                     // OUT
+ {
+    int retval;
+ 
+@@ -1565,7 +1594,7 @@ Vmx86_UnlockPage(VMDriver *vm, // IN
+ 
+ int
+ Vmx86_UnlockPageByMPN(VMDriver *vm, // IN: VMDriver
+-                      MPN64 mpn,    // IN: the page to unlock
++                      MPN mpn,      // IN: the page to unlock
+                       VA64 uAddr)   // IN: optional valid VA for this MPN
+ {
+    int retval;
+@@ -1609,7 +1638,7 @@ Vmx86_UnlockPageByMPN(VMDriver *vm, // IN: VMDriver
+ int
+ Vmx86_AllocLockedPages(VMDriver *vm,	     // IN: VMDriver
+ 		       VA64 addr,	     // OUT: VA of an array for
+-                                             //      allocated MPN64s.
++                                             //      allocated MPNs.
+ 		       unsigned numPages,    // IN: number of pages to allocate
+ 		       Bool kernelMPNBuffer, // IN: is the MPN buffer in kernel
+                                              //     or user address space?
+@@ -1695,11 +1724,11 @@ Vmx86_FreeLockedPages(VMDriver *vm,	    // IN: VM instance pointer
+  *----------------------------------------------------------------------
+  */
+ 
+-MPN64
++MPN
+ Vmx86_GetNextAnonPage(VMDriver *vm,       // IN: VM instance pointer
+-                      MPN64 mpn)          // IN: MPN
++                      MPN mpn)            // IN: MPN
+ {
+-   MPN64 ret;
++   MPN ret;
+ 
+    HostIF_VMLock(vm, 22);
+    ret = HostIF_GetNextAnonPage(vm, mpn);
+@@ -1934,7 +1963,7 @@ Vmx86_Admit(VMDriver *curVM,     // IN
+    if (curVM->memInfo.admitted) {
+       unsigned int allocatedPages, nonpaged;
+       signed int pages;
+-      MPN64 *mpns;
++      MPN *mpns;
+ 
+       /*
+        * More admission control: Get enough memory for the nonpaged portion
+diff --git a/vmmon-only/common/vmx86.h b/vmmon-only/common/vmx86.h
+index 966621a..84928bf 100644
+--- a/vmmon-only/common/vmx86.h
++++ b/vmmon-only/common/vmx86.h
+@@ -106,6 +106,7 @@ extern PseudoTSC pseudoTSC;
+ #define MAX_LOCKED_PAGES (-1)
+ 
+ extern VMDriver *Vmx86_CreateVM(void);
++extern int Vmx86_LookupUserMPN(VMDriver *vm, VA64 uAddr, MPN *mpn);
+ extern int Vmx86_ReleaseVM(VMDriver *vm);
+ extern int Vmx86_InitVM(VMDriver *vm, InitBlock *initParams);
+ extern int Vmx86_LateInitVM(VMDriver *vm);
+@@ -118,17 +119,17 @@ extern int Vmx86_SetHostClockRate(VMDriver *vm, int rate);
+ extern int Vmx86_LockPage(VMDriver *vm,
+                           VA64 uAddr,
+                           Bool allowMultipleMPNsPerVA,
+-                          MPN64 *mpn);
++                          MPN *mpn);
+ extern int Vmx86_UnlockPage(VMDriver *vm, VA64 uAddr);
+-extern int Vmx86_UnlockPageByMPN(VMDriver *vm, MPN64 mpn, VA64 uAddr);
+-extern MPN64 Vmx86_GetRecycledPage(VMDriver *vm);
+-extern int Vmx86_ReleaseAnonPage(VMDriver *vm, MPN64 mpn);
++extern int Vmx86_UnlockPageByMPN(VMDriver *vm, MPN mpn, VA64 uAddr);
++extern MPN Vmx86_GetRecycledPage(VMDriver *vm);
++extern int Vmx86_ReleaseAnonPage(VMDriver *vm, MPN mpn);
+ extern int Vmx86_AllocLockedPages(VMDriver *vm, VA64 addr,
+ 				  unsigned numPages, Bool kernelMPNBuffer,
+                                   Bool ignoreLimits);
+ extern int Vmx86_FreeLockedPages(VMDriver *vm, VA64 addr,
+ 				 unsigned numPages, Bool kernelMPNBuffer);
+-extern MPN64 Vmx86_GetNextAnonPage(VMDriver *vm, MPN64 mpn);
++extern MPN Vmx86_GetNextAnonPage(VMDriver *vm, MPN mpn);
+ extern int Vmx86_GetLockedPageList(VMDriver *vm, VA64 uAddr,
+ 				   unsigned int numPages);
+ 
+@@ -144,7 +145,7 @@ extern void Vmx86_Admit(VMDriver *curVM, VMMemInfoArgs *args);
+ extern Bool Vmx86_Readmit(VMDriver *curVM, OvhdMem_Deltas *delta);
+ extern void Vmx86_UpdateMemInfo(VMDriver *curVM,
+                                 const VMMemMgmtInfoPatch *patch);
+-extern void Vmx86_Add2MonPageTable(VMDriver *vm, VPN vpn, MPN64 mpn,
++extern void Vmx86_Add2MonPageTable(VMDriver *vm, VPN vpn, MPN mpn,
+ 				   Bool readOnly);
+ extern Bool Vmx86_PAEEnabled(void);
+ extern Bool Vmx86_VMXEnabled(void);
+diff --git a/vmmon-only/include/basic_initblock.h b/vmmon-only/include/basic_initblock.h
+index f6805d2..438e9b6 100644
+--- a/vmmon-only/include/basic_initblock.h
++++ b/vmmon-only/include/basic_initblock.h
+@@ -51,7 +51,7 @@ struct InitBlock {
+    VA64   crosspage[MAX_INITBLOCK_CPUS];
+    uint32 vmInitFailurePeriod;
+    LA64   crossGDTHKLA;
+-   MPN64  crossGDTMPNs[5];  // CROSSGDT_NUMPAGES
++   MPN    crossGDTMPNs[5];  // CROSSGDT_NUMPAGES
+ }
+ #include "vmware_pack_end.h"
+ InitBlock;
 diff --git a/vmmon-only/include/compat_pgtable.h b/vmmon-only/include/compat_pgtable.h
 index dedc25a..4722d4e 100644
 --- a/vmmon-only/include/compat_pgtable.h
@@ -124,6 +748,69 @@ index dedc25a..4722d4e 100644
  
  
  #endif /* __COMPAT_PGTABLE_H__ */
+diff --git a/vmmon-only/include/iocontrols.h b/vmmon-only/include/iocontrols.h
+index e65c180..a360864 100644
+--- a/vmmon-only/include/iocontrols.h
++++ b/vmmon-only/include/iocontrols.h
+@@ -476,7 +476,7 @@ enum IOCTLCmd {
+ typedef
+ #include "vmware_pack_begin.h"
+ struct VMLockPageRet {
+-   MPN64 mpn;      // OUT: MPN
++   MPN   mpn;      // OUT: MPN
+    int32 status;   // OUT: PAGE_* status code
+ }
+ #include "vmware_pack_end.h"
+@@ -587,8 +587,8 @@ typedef struct VMMemInfoArgs {
+    (sizeof(VMMemInfoArgs) - sizeof(VMMemMgmtInfo) + (numVMs) * sizeof(VMMemMgmtInfo))
+ 
+ typedef struct VMMPNNext {
+-   MPN64       inMPN;   // IN
+-   MPN64       outMPN;  // OUT
++   MPN         inMPN;   // IN
++   MPN         outMPN;  // OUT
+ } VMMPNNext;
+ 
+ typedef struct VMMPNList {
+@@ -606,12 +606,12 @@ typedef struct VARange {
+ } VARange;
+ 
+ typedef struct VMMUnlockPageByMPN {
+-   MPN64     mpn;
++   MPN       mpn;
+    VA64      uAddr;         /* IN: User VA of the page (optional). */
+ } VMMUnlockPageByMPN;
+ 
+ typedef struct VMMReadWritePage {
+-   MPN64        mpn;   // IN
++   MPN          mpn;   // IN
+    VA64         uAddr; // IN: User VA of a PAGE_SIZE-large buffer.
+ } VMMReadWritePage;
+ 
+@@ -709,7 +709,7 @@ typedef struct VMAllocContiguousMem {
+    VA64   mpn64List;// IN: User VA of an array of 64-bit MPNs.
+    uint32 mpnCount; // IN
+    uint32 order;    // IN
+-   MPN64  maxMPN;   // IN
++   MPN    maxMPN;   // IN
+ } VMAllocContiguousMem;
+ #elif defined __APPLE__
+ #   include "iocontrolsMacos.h"
+diff --git a/vmmon-only/include/numa_defs.h b/vmmon-only/include/numa_defs.h
+index c085c48..4fe9863 100644
+--- a/vmmon-only/include/numa_defs.h
++++ b/vmmon-only/include/numa_defs.h
+@@ -57,8 +57,8 @@ typedef uint8  NUMA_MemRangeID;
+  * Structures
+  */
+ typedef struct {
+-   MPN64        startMPN;
+-   MPN64        endMPN;
++   MPN          startMPN;
++   MPN          endMPN;
+    NUMA_Node    id;
+    Bool         isReliable;
+ } NUMA_MemRange;
 diff --git a/vmmon-only/include/pgtbl.h b/vmmon-only/include/pgtbl.h
 index ed1ae8a..0935e09 100644
 --- a/vmmon-only/include/pgtbl.h
@@ -297,7 +984,7 @@ index ed1ae8a..0935e09 100644
   */
  
 -static INLINE MPN64
-+static INLINE MPN64
++static INLINE MPN
  PgtblVa2MPNLocked(struct mm_struct *mm, // IN: Mm structure of a process
                    VA addr)              // IN: Address in the virtual address
 +                                        //     space of that process
@@ -305,7 +992,7 @@ index ed1ae8a..0935e09 100644
 -   pte_t *pte;
 +   pgd_t *pgd;
 +   compat_p4d_t *p4d;
-+   MPN64 mpn;
++   MPN mpn;
  
 -   pte = PgtblVa2PTELocked(mm, addr);
 -   if (pte != NULL) {
@@ -442,12 +1129,12 @@ index ed1ae8a..0935e09 100644
   */
  
 -static INLINE MPN64
-+static INLINE MPN64
++static INLINE MPN
  PgtblVa2MPN(VA addr)  // IN
  {
     struct mm_struct *mm;
 -   MPN64 mpn;
-+   MPN64 mpn;
++   MPN mpn;
  
     /* current->mm is NULL for kernel threads, so use active_mm. */
     mm = current->active_mm;
@@ -535,3 +1222,599 @@ index ed1ae8a..0935e09 100644
 -
 -
  #endif /* __PGTBL_H__ */
+diff --git a/vmmon-only/include/pshare_ext.h b/vmmon-only/include/pshare_ext.h
+index f8d453f..52640a3 100644
+--- a/vmmon-only/include/pshare_ext.h
++++ b/vmmon-only/include/pshare_ext.h
+@@ -64,7 +64,7 @@ MY_ASSERTS(PSHARE_EXT,
+ 
+ typedef struct PShare_P2MUpdate {
+    BPN     bpn;
+-   MPN64   mpn;
++   MPN     mpn;
+ } PShare_P2MUpdate;
+ 
+ void BusMemPShare_HandleBackdoor(void);
+diff --git a/vmmon-only/include/vm_basic_types.h b/vmmon-only/include/vm_basic_types.h
+index 7af9a2d..9e39ec8 100644
+--- a/vmmon-only/include/vm_basic_types.h
++++ b/vmmon-only/include/vm_basic_types.h
+@@ -452,7 +452,7 @@ typedef uint32 Worldlet_ID;
+ /* The Xserver source compiles with -ansi -pendantic */
+ #ifndef __STRICT_ANSI__
+ typedef uint64 MA;
+-typedef uint32 MPN;
++typedef uint32 MPN32;
+ #endif
+ 
+ /*
+@@ -505,7 +505,7 @@ typedef uint64 LPN64;
+ typedef uint64 PA64;
+ typedef uint64 PPN64;
+ typedef uint64 MA64;
+-typedef uint64 MPN64;
++typedef uint64 MPN;
+ 
+ /*
+  * IO device DMA virtual address and page number (translated by IOMMU to
+@@ -538,13 +538,13 @@ typedef void * UserVA;
+ 
+ #define MPN38_MASK        ((1ull << 38) - 1) /* imposed by vmkernel pframes */
+ 
+-#define RESERVED_MPN      ((MPN64)0)
+-#define INVALID_MPN       ((MPN64)MPN38_MASK)
+-#define MEMREF_MPN        ((MPN64)MPN38_MASK - 1)
+-#define RELEASED_MPN      ((MPN64)MPN38_MASK - 2)
++#define RESERVED_MPN      ((MPN)0)
++#define INVALID_MPN       ((MPN)MPN38_MASK)
++#define MEMREF_MPN        ((MPN)MPN38_MASK - 1)
++#define RELEASED_MPN      ((MPN)MPN38_MASK - 2)
+ 
+ /* account for special MPNs defined above */
+-#define MAX_MPN           ((MPN64)MPN38_MASK - 3) /* 50 bits of address space */
++#define MAX_MPN           ((MPN)MPN38_MASK - 3) /* 50 bits of address space */
+ 
+ #define INVALID_IOPN      ((IOPN)-1)
+ #define MAX_IOPN          (INVALID_IOPN - 1)
+diff --git a/vmmon-only/include/vmmem_shared.h b/vmmon-only/include/vmmem_shared.h
+index bcb2639..bfa8e16 100644
+--- a/vmmon-only/include/vmmem_shared.h
++++ b/vmmon-only/include/vmmem_shared.h
+@@ -77,7 +77,7 @@ typedef struct PlatformPageInfoList {
+    uint32 numPages;
+    uint32 _pad;
+    BPN    bpn[MAX_PLATFORM_PAGE_INFO_PAGES];    // bpns to check
+-   MPN64  mpn[MAX_PLATFORM_PAGE_INFO_PAGES];    // filled in by host
++   MPN    mpn[MAX_PLATFORM_PAGE_INFO_PAGES];    // filled in by host
+    uint8  flags[MAX_PLATFORM_PAGE_INFO_PAGES];  // filled in by host
+ } PlatformPageInfoList;
+ 
+diff --git a/vmmon-only/include/x86types.h b/vmmon-only/include/x86types.h
+index dcfc2ce..0729c14 100644
+--- a/vmmon-only/include/x86types.h
++++ b/vmmon-only/include/x86types.h
+@@ -61,8 +61,8 @@
+ #define PA_2_PPN(_pa)     ((_pa) >> PAGE_SHIFT)
+ #define PPN_2_PA(_ppn)    ((PA)(_ppn) << PAGE_SHIFT)
+ 
+-static INLINE MA    MPN_2_MA(MPN64 mpn)   { return    (MA)mpn << PAGE_SHIFT;  }
+-static INLINE MPN64 MA_2_MPN(MA ma)       { return (MPN64)(ma >> PAGE_SHIFT); }
++static INLINE MA    MPN_2_MA(MPN mpn)     { return    (MA)mpn << PAGE_SHIFT;  }
++static INLINE MPN   MA_2_MPN(MA ma)       { return (MPN)(ma >> PAGE_SHIFT);   }
+ 
+ static INLINE IOA   IOPN_2_IOA(IOPN iopn) { return (IOA)(iopn << PAGE_SHIFT); }
+ static INLINE IOPN  IOA_2_IOPN(IOA ioa)   { return (IOPN)(ioa >> PAGE_SHIFT); }
+diff --git a/vmmon-only/linux/driver.c b/vmmon-only/linux/driver.c
+index 331d30a..d79bcb4 100644
+--- a/vmmon-only/linux/driver.c
++++ b/vmmon-only/linux/driver.c
+@@ -1399,10 +1399,6 @@ LinuxDriver_Ioctl(struct inode *inode,  // IN:
+    case IOCTL_VMX86_CREATE_VM:
+    case IOCTL_VMX86_INIT_CROSSGDT:
+    case IOCTL_VMX86_SET_UID:
+-   case IOCTL_VMX86_LOOK_UP_MPN:
+-#if defined(__linux__) && defined(VMX86_DEVEL)
+-   case IOCTL_VMX86_LOOK_UP_LARGE_MPN:
+-#endif
+    case IOCTL_VMX86_GET_NUM_VMS:
+    case IOCTL_VMX86_GET_TOTAL_MEM_USAGE:
+    case IOCTL_VMX86_SET_HARD_LIMIT:
+@@ -1412,8 +1408,6 @@ LinuxDriver_Ioctl(struct inode *inode,  // IN:
+    case IOCTL_VMX86_GET_KHZ_ESTIMATE:
+    case IOCTL_VMX86_GET_ALL_CPUID:
+    case IOCTL_VMX86_GET_ALL_MSRS:
+-   case IOCTL_VMX86_READ_PAGE:
+-   case IOCTL_VMX86_WRITE_PAGE:
+    case IOCTL_VMX86_SET_POLL_TIMEOUT_PTR:
+    case IOCTL_VMX86_GET_KERNEL_CLOCK_RATE:
+    case IOCTL_VMX86_GET_REFERENCE_CLOCK_HZ:
+@@ -1580,7 +1574,7 @@ LinuxDriver_Ioctl(struct inode *inode,  // IN:
+       if (retval) {
+          break;
+       }
+-      args.ret.status = HostIF_LookupUserMPN(vm, args.uAddr, &args.ret.mpn);
++      args.ret.status = Vmx86_LookupUserMPN(vm, args.uAddr, &args.ret.mpn);
+       retval = HostIF_CopyToUser((void *)ioarg, &args, sizeof args);
+       break;
+    }
+@@ -1593,7 +1587,7 @@ LinuxDriver_Ioctl(struct inode *inode,  // IN:
+       if (retval) {
+          break;
+       }
+-      args.ret.status = HostIF_LookupLargeMPN(args.uAddr, &args.ret.mpn);
++      args.ret.status = Vmx86_LookupLargeMPN(args.uAddr, &args.ret.mpn);
+       retval = HostIF_CopyToUser((void *)ioarg, &args, sizeof args);
+       break;
+    }
+@@ -1913,7 +1907,7 @@ LinuxDriver_Ioctl(struct inode *inode,  // IN:
+          if (retval) {
+             break;
+          }
+-         retval = HostIF_ReadPage(req.mpn, req.uAddr, FALSE);
++         retval = HostIF_ReadPage(vm, req.mpn, req.uAddr, FALSE);
+          break;
+       }
+ 
+@@ -1924,7 +1918,7 @@ LinuxDriver_Ioctl(struct inode *inode,  // IN:
+          if (retval) {
+             break;
+          }
+-         retval = HostIF_WritePage(req.mpn, req.uAddr, FALSE);
++         retval = HostIF_WritePage(vm, req.mpn, req.uAddr, FALSE);
+          break;
+       }
+ 
+diff --git a/vmmon-only/linux/hostif.c b/vmmon-only/linux/hostif.c
+index 8aab0a3..0742005 100644
+--- a/vmmon-only/linux/hostif.c
++++ b/vmmon-only/linux/hostif.c
+@@ -85,13 +85,13 @@
+ #include "x86apic.h"
+ #include "vm_asm.h"
+ #include "modulecall.h"
++#include "driver.h"
+ #include "memtrack.h"
+ #include "phystrack.h"
+ #include "cpuid.h"
+ #include "cpuid_info.h"
+ #include "hostif.h"
+ #include "hostif_priv.h"
+-#include "driver.h"
+ #include "vmhost.h"
+ #include "x86msr.h"
+ #include "apic.h"
+@@ -769,7 +769,7 @@ HostIFHostMemInit(VMDriver *vm)  // IN:
+ static void
+ HostIFHostMemCleanup(VMDriver *vm)  // IN:
+ {
+-   MPN64 mpn;
++   MPN mpn;
+    VMHost *vmh = vm->vmhost;
+ 
+    if (!vmh) {
+@@ -817,12 +817,12 @@ HostIFHostMemCleanup(VMDriver *vm)  // IN:
+  *----------------------------------------------------------------------
+  */
+ 
+-MPN64
++MPN
+ HostIF_AllocMachinePage(void)
+ {
+   struct page *pg = alloc_page(GFP_HIGHUSER);
+ 
+-  return (pg) ? ((MPN64)page_to_pfn(pg)) : INVALID_MPN;
++  return (pg) ? ((MPN)page_to_pfn(pg)) : INVALID_MPN;
+ }
+ 
+ 
+@@ -845,7 +845,7 @@ HostIF_AllocMachinePage(void)
+  */
+ 
+ void
+-HostIF_FreeMachinePage(MPN64 mpn)  // IN:
++HostIF_FreeMachinePage(MPN mpn)  // IN:
+ {
+   struct page *pg = pfn_to_page(mpn);
+ 
+@@ -877,7 +877,7 @@ HostIF_AllocLockedPages(VMDriver *vm,	     // IN: VM instance pointer
+ 			unsigned numPages,   // IN: number of pages to allocate
+ 			Bool kernelMPNBuffer)// IN: is the MPN buffer in kernel or user address space?
+ {
+-   MPN64 *pmpn = VA64ToPtr(addr);
++   MPN *pmpn = VA64ToPtr(addr);
+ 
+    VMHost *vmh = vm->vmhost;
+    unsigned int cnt;
+@@ -888,14 +888,14 @@ HostIF_AllocLockedPages(VMDriver *vm,	     // IN: VM instance pointer
+    }
+    for (cnt = 0; cnt < numPages; cnt++) {
+       struct page* pg;
+-      MPN64 mpn;
++      MPN mpn;
+ 
+       pg = alloc_page(GFP_HIGHUSER);
+       if (!pg) {
+          err = -ENOMEM;
+ 	 break;
+       }
+-      mpn = (MPN64)page_to_pfn(pg);
++      mpn = (MPN)page_to_pfn(pg);
+       if (kernelMPNBuffer) {
+          *pmpn = mpn;
+       } else if (HostIF_CopyToUser(pmpn, &mpn, sizeof *pmpn) != 0) {
+@@ -938,11 +938,11 @@ HostIF_FreeLockedPages(VMDriver *vm,	     // IN: VM instance pointer
+ 		       Bool kernelMPNBuffer) // IN: is the MPN buffer in kernel or user address space?
+ {
+    const int MPN_BATCH = 64;
+-   MPN64 const *pmpn = VA64ToPtr(addr);
++   MPN const *pmpn = VA64ToPtr(addr);
+    VMHost *vmh = vm->vmhost;
+    unsigned int cnt;
+    struct page *pg;
+-   MPN64 *mpns;
++   MPN *mpns;
+ 
+    mpns = HostIF_AllocKernelMem(sizeof *mpns * MPN_BATCH, TRUE);
+ 
+@@ -1016,7 +1016,7 @@ HostIF_FreeLockedPages(VMDriver *vm,	     // IN: VM instance pointer
+ int
+ HostIF_Init(VMDriver *vm)  // IN:
+ {
+-   vm->memtracker = MemTrack_Init();
++   vm->memtracker = MemTrack_Init(vm);
+    if (vm->memtracker == NULL) {
+       return -1;
+    }
+@@ -1055,7 +1055,7 @@ HostIF_Init(VMDriver *vm)  // IN:
+ int
+ HostIF_LookupUserMPN(VMDriver *vm, // IN: VMDriver
+                      VA64 uAddr,   // IN: user VA of the page
+-                     MPN64 *mpn)   // OUT
++                     MPN *mpn)     // OUT
+ {
+    void *uvAddr = VA64ToPtr(uAddr);
+    int retval = PAGE_LOCK_SUCCESS;
+@@ -1208,7 +1208,7 @@ HostIFGetUserPages(void *uvAddr,          // IN
+ 
+ int
+ HostIF_LookupLargeMPN(VA64 uAddr,   // IN: user VA of the page
+-                      MPN64 *mpn)   // OUT
++                      MPN *mpn)     // OUT
+ {
+    struct page *page;
+    void *uvAddr = VA64ToPtr(uAddr);
+@@ -1217,7 +1217,7 @@ HostIF_LookupLargeMPN(VA64 uAddr,   // IN: user VA of the page
+       return PAGE_LOCK_FAILED;
+    }
+ 
+-   *mpn = (MPN64)page_to_pfn(page);
++   *mpn = (MPN)page_to_pfn(page);
+    put_page(page);
+ 
+    return PAGE_LOCK_SUCCESS;
+@@ -1244,7 +1244,7 @@ HostIF_LookupLargeMPN(VA64 uAddr,   // IN: user VA of the page
+ 
+ Bool
+ HostIF_IsLockedByMPN(VMDriver *vm,  // IN:
+-                     MPN64 mpn)     // IN:
++                     MPN mpn)       // IN:
+ {
+   return PhysTrack_Test(vm->vmhost->lockedPages, mpn);
+ }
+@@ -1271,7 +1271,7 @@ int
+ HostIF_LockPage(VMDriver *vm,                // IN: VMDriver
+                 VA64 uAddr,                  // IN: user VA of the page
+                 Bool allowMultipleMPNsPerVA, // IN: allow to lock many pages per VA
+-                MPN64 *mpn)                  // OUT: pinned page
++                MPN *mpn)                    // OUT: pinned page
+ {
+    void *uvAddr = VA64ToPtr(uAddr);
+    struct page *page;
+@@ -1295,7 +1295,7 @@ HostIF_LockPage(VMDriver *vm,                // IN: VMDriver
+       return PAGE_LOCK_FAILED;
+    }
+ 
+-   *mpn = (MPN64)page_to_pfn(page);
++   *mpn = (MPN)page_to_pfn(page);
+ 
+    if (allowMultipleMPNsPerVA) {
+       /*
+@@ -1391,7 +1391,7 @@ HostIF_UnlockPage(VMDriver *vm,  // IN:
+ 
+ int
+ HostIF_UnlockPageByMPN(VMDriver *vm, // IN: VMDriver
+-                       MPN64 mpn,    // IN: the MPN to unlock
++                       MPN mpn,      // IN: the MPN to unlock
+                        VA64 uAddr)   // IN: optional(debugging) VA for the MPN
+ {
+    if (!PhysTrack_Test(vm->vmhost->lockedPages, mpn)) {
+@@ -1409,7 +1409,7 @@ HostIF_UnlockPageByMPN(VMDriver *vm, // IN: VMDriver
+        */
+ 
+       if (va != NULL) {
+-         MPN64 lookupMpn = PgtblVa2MPN((VA)va);
++         MPN lookupMpn = PgtblVa2MPN((VA)va);
+ 
+          if (lookupMpn != INVALID_MPN && mpn != lookupMpn) {
+             Warning("Page lookup fail %#"FMT64"x %016" FMT64 "x %p\n",
+@@ -2042,15 +2042,15 @@ HostIF_MapCrossPage(VMDriver *vm, // IN
+       return NULL;
+    }
+    vPgAddr = (VA) MapCrossPage(page);
+-   HostIF_GlobalLock(16);
++   HostIF_VMLock(vm, 27);
+    if (vm->vmhost->crosspagePagesCount >= MAX_INITBLOCK_CPUS) {
+-      HostIF_GlobalUnlock(16);
++      HostIF_VMUnlock(vm, 27);
+       UnmapCrossPage(page, (void*)vPgAddr);
+ 
+       return NULL;
+    }
+    vm->vmhost->crosspagePages[vm->vmhost->crosspagePagesCount++] = page;
+-   HostIF_GlobalUnlock(16);
++   HostIF_VMUnlock(vm, 27);
+ 
+    ret = vPgAddr | (((VA)p) & (PAGE_SIZE - 1));
+ 
+@@ -2083,10 +2083,10 @@ HostIF_MapCrossPage(VMDriver *vm, // IN
+ 
+ void *
+ HostIF_AllocCrossGDT(uint32 numPages,     // IN: Number of pages
+-                     MPN64 maxValidFirst, // IN: Highest valid MPN of first page
+-                     MPN64 *crossGDTMPNs) // OUT: Array of MPNs
++                     MPN maxValidFirst,   // IN: Highest valid MPN of first page
++                     MPN *crossGDTMPNs)   // OUT: Array of MPNs
+ {
+-   MPN64 startMPN;
++   MPN startMPN;
+    struct page *pages;
+    uint32 i;
+    void *crossGDT;
+@@ -2865,12 +2865,74 @@ HostIF_CallOnEachCPU(void (*func)(void*), // IN: function to call
+ 
+ 
+ /*
++ *-----------------------------------------------------------------------------
++ *
++ * HostIFCheckTrackedMPN --
++ *
++ *      Check if a given MPN is tracked for the specified VM.
++ *
++ * Result:
++ *      TRUE if the MPN is tracked in one of the trackers for the specified VM,
++ *      FALSE otherwise.
++ *
++ * Side effects:
++ *      None
++ *
++ *-----------------------------------------------------------------------------
++ */
++
++Bool
++HostIFCheckTrackedMPN(VMDriver *vm, // IN: The VM instance
++                      MPN mpn)      // IN: The MPN
++{
++   VMHost * const vmh = vm->vmhost;
++
++   if (vmh == NULL) {
++      return FALSE;
++   }
++
++   HostIF_VMLock(vm, 32); // Debug version of PhysTrack wants VM's lock.
++   if (vmh->lockedPages) {
++      if (PhysTrack_Test(vmh->lockedPages, mpn)) {
++         HostIF_VMUnlock(vm, 32);
++         return TRUE;
++      }
++   }
++
++   if (vmh->AWEPages) {
++      if (PhysTrack_Test(vmh->AWEPages, mpn)) {
++         HostIF_VMUnlock(vm, 32);
++         return TRUE;
++      }
++   }
++
++   if (vm->memtracker) {
++      if (MemTrack_LookupMPN(vm->memtracker, mpn) != NULL) {
++         HostIF_VMUnlock(vm, 32);
++         return TRUE;
++      }
++   }
++   HostIF_VMUnlock(vm, 32);
++
++   if (vmx86_debug) {
++      /*
++       * The monitor may have old KSeg mappings to pages which it no longer
++       * owns.  Minimize customer noise by only logging this for developers.
++       */
++      Log("%s: MPN %" FMT64 "x not owned by this VM\n", __FUNCTION__, mpn);
++   }
++   return FALSE;
++}
++
++
++/*
+  *----------------------------------------------------------------------
+  *
+  * HostIF_ReadPage --
+  *
+- *      puts the content of a machine page into a kernel or user mode 
+- *      buffer. 
++ *      Reads one page of data from a machine page and returns it in the
++ *      specified kernel or user buffer.  The machine page must be owned by
++ *      the specified VM.
+  *
+  * Results:
+  *      0 on success
+@@ -2883,7 +2945,8 @@ HostIF_CallOnEachCPU(void (*func)(void*), // IN: function to call
+  */
+ 
+ int
+-HostIF_ReadPage(MPN64 mpn,           // MPN of the page
++HostIF_ReadPage(VMDriver *vm,        // IN: The VM instance
++                MPN mpn,             // MPN of the page
+                 VA64 addr,           // buffer for data
+                 Bool kernelBuffer)   // is the buffer in kernel space?
+ {
+@@ -2895,6 +2958,9 @@ HostIF_ReadPage(MPN64 mpn,           // MPN of the page
+    if (mpn == INVALID_MPN) {
+       return -EFAULT;
+    }
++   if (HostIFCheckTrackedMPN(vm, mpn) == FALSE) {
++      return -EFAULT;
++   }
+ 
+    page = pfn_to_page(mpn);
+    ptr = kmap(page);
+@@ -2918,8 +2984,8 @@ HostIF_ReadPage(MPN64 mpn,           // MPN of the page
+  *
+  * HostIF_WritePage --
+  *
+- *      Put the content of a kernel or user mode buffer into a machine 
+- *      page.
++ *      Writes one page of data from a kernel or user buffer onto the specified
++ *      machine page.  The machine page must be owned by the specified VM.
+  *
+  * Results:
+  *      0 on success
+@@ -2932,9 +2998,9 @@ HostIF_ReadPage(MPN64 mpn,           // MPN of the page
+  */
+ 
+ int
+-HostIF_WritePage(MPN64 mpn,            // MPN of the page
+-                 VA64 addr,            // data to write to the page
+-                 Bool kernelBuffer)    // is the buffer in kernel space?
++HostIFWritePageWork(MPN mpn,              // MPN of the page
++                    VA64 addr,            // data to write to the page
++                    Bool kernelBuffer)    // is the buffer in kernel space?
+ {
+    void const *buf = VA64ToPtr(addr);
+    int ret = 0;
+@@ -2961,6 +3027,45 @@ HostIF_WritePage(MPN64 mpn,            // MPN of the page
+    return ret;
+ }
+ 
++int
++HostIF_WritePage(VMDriver *vm,         // IN: The VM instance
++                 MPN mpn,              // MPN of the page
++                 VA64 addr,            // data to write to the page
++                 Bool kernelBuffer)    // is the buffer in kernel space?
++{
++   if (HostIFCheckTrackedMPN(vm, mpn) == FALSE) {
++      return -EFAULT;
++   }
++   return HostIFWritePageWork(mpn, addr, kernelBuffer);
++}
++
++
++/*
++ *-----------------------------------------------------------------------------
++ *
++ * HostIF_WriteMachinePage --
++ *
++ *      Puts the content of a machine page into a kernel or user mode
++ *      buffer.  This should only be used for host-global pages, not any
++ *      VM-owned pages.
++ *
++ * Results:
++ *      On success: 0
++ *      On failure: a negative error code
++ *
++ * Side effects:
++ *      None
++ *
++ *-----------------------------------------------------------------------------
++ */
++
++int
++HostIF_WriteMachinePage(MPN mpn,   // IN: MPN of the page
++                        VA64 addr) // IN: data to write to the page
++{
++   return HostIFWritePageWork(mpn, addr, TRUE);
++}
++
+ 
+ /*
+  *----------------------------------------------------------------------
+@@ -2985,8 +3090,8 @@ HostIF_GetLockedPageList(VMDriver* vm,          // IN: VM instance pointer
+                          VA64 uAddr,            // OUT: user mode buffer for MPNs
+                          unsigned int numPages) // IN: size of the buffer in MPNs
+ {
+-   MPN64 *mpns = VA64ToPtr(uAddr);
+-   MPN64 mpn;
++   MPN *mpns = VA64ToPtr(uAddr);
++   MPN mpn;
+    unsigned count;
+ 
+    struct PhysTracker* AWEPages;
+@@ -3024,8 +3129,8 @@ HostIF_GetLockedPageList(VMDriver* vm,          // IN: VM instance pointer
+  *-----------------------------------------------------------------------------
+  */
+ 
+-MPN64
+-HostIF_GetNextAnonPage(VMDriver *vm, MPN64 inMPN)
++MPN
++HostIF_GetNextAnonPage(VMDriver *vm, MPN inMPN)
+ {
+    if (!vm->vmhost || !vm->vmhost->AWEPages) {
+       return INVALID_MPN;
+diff --git a/vmmon-only/linux/hostif_priv.h b/vmmon-only/linux/hostif_priv.h
+index 9a56df1..49d03e9 100644
+--- a/vmmon-only/linux/hostif_priv.h
++++ b/vmmon-only/linux/hostif_priv.h
+@@ -26,7 +26,7 @@
+ #define _HOSTIF_PRIV_H_
+ 
+ #if defined(VMX86_DEVEL)
+-EXTERN int    HostIF_LookupLargeMPN(VA64 uAddr, MPN64 *mpn);
++EXTERN int    HostIF_LookupLargeMPN(VA64 uAddr, MPN *mpn);
+ #endif
+ 
+ /* Functions for transferring data to/from userspace. */
+diff --git a/vmmon-only/vmcore/moduleloop.c b/vmmon-only/vmcore/moduleloop.c
+index a4142b2..dd87cec 100644
+--- a/vmmon-only/vmcore/moduleloop.c
++++ b/vmmon-only/vmcore/moduleloop.c
+@@ -131,7 +131,7 @@ skipTaskSwitch:;
+          break;
+ 
+       case MODULECALL_GET_RECYCLED_PAGES: {
+-         MPN64 mpns[MODULECALL_NUM_ARGS];
++         MPN mpns[MODULECALL_NUM_ARGS];
+          int nPages = MIN((int)crosspage->args[0], MODULECALL_NUM_ARGS);
+ 
+          retval = Vmx86_AllocLockedPages(vm, PtrToVA64(mpns), nPages, TRUE,
+@@ -187,9 +187,9 @@ skipTaskSwitch:;
+ 
+       case MODULECALL_RELEASE_ANON_PAGES: {
+          unsigned count;
+-         MPN64 mpns[MODULECALL_NUM_ARGS];
++         MPN mpns[MODULECALL_NUM_ARGS];
+          for (count = 0; count < MODULECALL_NUM_ARGS; count++) {
+-            mpns[count] = (MPN64)crosspage->args[count];
++            mpns[count] = (MPN)crosspage->args[count];
+             if (mpns[count] == INVALID_MPN) {
+                break;
+             }
+@@ -205,16 +205,18 @@ skipTaskSwitch:;
+          uint32 nPages = (uint32)crosspage->args[1];
+          VA64   uAddr  = (VA64)VPN_2_VA(vpn);
+          ASSERT(nPages <= MODULECALL_NUM_ARGS);
++         HostIF_VMLock(vm, 38);
+          for (i = 0; i < nPages; i++) {
+-            MPN64 mpn;
++            MPN mpn;
+             HostIF_LookupUserMPN(vm, uAddr + i * PAGE_SIZE, &mpn);
+             crosspage->args[i] = mpn;
+          }
++         HostIF_VMUnlock(vm, 38);
+          break;
+       }
+ 
+       case MODULECALL_PIN_MPN: {
+-         MPN64 mpn;
++         MPN mpn;
+          VPN64 vpn = crosspage->args[0];
+          VA64   va = VPN_2_VA(vpn);
+          retval = Vmx86_LockPage(vm, va, FALSE, &mpn);

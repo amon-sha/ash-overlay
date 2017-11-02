@@ -1,0 +1,41 @@
+diff --git a/vmnet-only/vm_basic_types.h b/vmnet-only/vm_basic_types.h
+index 7af9a2d..9e39ec8 100644
+--- a/vmnet-only/vm_basic_types.h
++++ b/vmnet-only/vm_basic_types.h
+@@ -452,7 +452,7 @@ typedef uint32 Worldlet_ID;
+ /* The Xserver source compiles with -ansi -pendantic */
+ #ifndef __STRICT_ANSI__
+ typedef uint64 MA;
+-typedef uint32 MPN;
++typedef uint32 MPN32;
+ #endif
+ 
+ /*
+@@ -505,7 +505,7 @@ typedef uint64 LPN64;
+ typedef uint64 PA64;
+ typedef uint64 PPN64;
+ typedef uint64 MA64;
+-typedef uint64 MPN64;
++typedef uint64 MPN;
+ 
+ /*
+  * IO device DMA virtual address and page number (translated by IOMMU to
+@@ -538,13 +538,13 @@ typedef void * UserVA;
+ 
+ #define MPN38_MASK        ((1ull << 38) - 1) /* imposed by vmkernel pframes */
+ 
+-#define RESERVED_MPN      ((MPN64)0)
+-#define INVALID_MPN       ((MPN64)MPN38_MASK)
+-#define MEMREF_MPN        ((MPN64)MPN38_MASK - 1)
+-#define RELEASED_MPN      ((MPN64)MPN38_MASK - 2)
++#define RESERVED_MPN      ((MPN)0)
++#define INVALID_MPN       ((MPN)MPN38_MASK)
++#define MEMREF_MPN        ((MPN)MPN38_MASK - 1)
++#define RELEASED_MPN      ((MPN)MPN38_MASK - 2)
+ 
+ /* account for special MPNs defined above */
+-#define MAX_MPN           ((MPN64)MPN38_MASK - 3) /* 50 bits of address space */
++#define MAX_MPN           ((MPN)MPN38_MASK - 3) /* 50 bits of address space */
+ 
+ #define INVALID_IOPN      ((IOPN)-1)
+ #define MAX_IOPN          (INVALID_IOPN - 1)

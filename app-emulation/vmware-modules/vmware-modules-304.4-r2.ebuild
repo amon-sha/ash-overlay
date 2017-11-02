@@ -112,7 +112,8 @@ src_prepare() {
 	kernel_is ge 4 11 0 && epatch "${FILESDIR}/${PV_MAJOR}-4.11-01-vsock-lockdep.patch"
 	kernel_is ge 4 11 0 && epatch "${FILESDIR}/${PV_MAJOR}-4.11-02-vmmon.patch"
 	kernel_is ge 4 12 0 && epatch "${FILESDIR}/${PV_MAJOR}-4.12-00-vmmon.patch"
-	kernel_is ge 4 12 0 && epatch "${FILESDIR}/${PV_MAJOR}-4.12-01-vmblock.patch"
+	kernel_is ge 4 12 0 && epatch "${FILESDIR}/${PV_MAJOR}-4.12-01-vmnet.patch"
+	kernel_is ge 4 12 0 && epatch "${FILESDIR}/${PV_MAJOR}-4.12-02-vmblock.patch"
 
 	# Allow user patches so they can support RC kernels and whatever else
 	epatch_user
