@@ -267,7 +267,6 @@ wine_env_vcs_vars() {
 }
 
 pkg_pretend() {
-	wine_compiler_check || die
 	wine_build_environment_check || die
 
 	# Verify OSS support
@@ -369,6 +368,7 @@ src_prepare() {
 }
 
 src_configure() {
+	wine_compiler_check || die
 	export LDCONFIG=/bin/true
 	use custom-cflags || strip-flags
 
