@@ -24,7 +24,6 @@ RDEPEND=">=x11-libs/gtk+-2.18:2
 "
 DEPEND="${RDEPEND}
 	sys-devel/gettext
-	app-text/scrollkeeper
 	>=dev-util/intltool-0.35
 	virtual/pkgconfig
 	>=app-text/gnome-doc-utils-0.3.2
