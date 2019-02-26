@@ -1,0 +1,27 @@
+diff --git a/vmblock-only/linux/inode.c b/vmblock-only/linux/inode.c
+index 00bc886..ff4fe2a 100644
+--- a/vmblock-only/linux/inode.c
++++ b/vmblock-only/linux/inode.c
+@@ -30,6 +30,10 @@
+ #include <linux/namei.h>
+ #include <linux/cred.h>
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
++#include <linux/iversion.h>
++#endif
++
+ #include "vmblockInt.h"
+ #include "filesystem.h"
+ #include "block.h"
+@@ -155,7 +159,11 @@ InodeOpLookup(struct inode *dir,      // IN: parent directory's inode
+ 
+    inode->i_mode = S_IFLNK | S_IRWXUGO;
+    inode->i_size = INODE_TO_IINFO(inode)->nameLen;
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
++   inode_set_iversion(inode, 1);
++#else
+    inode->i_version = 1;
++#endif
+    inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+    inode->i_uid = inode->i_gid = 0;
