@@ -15,7 +15,7 @@ IUSE=""
 DEPEND="
 	sys-libs/libunwind
 	net-misc/curl
-	dev-libs/openssl
+	dev-libs/openssl-compat:1.0.0
 	dev-libs/icu
 "
 RDEPEND="${DEPEND}"
