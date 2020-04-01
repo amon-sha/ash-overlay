@@ -125,6 +125,9 @@ src_prepare() {
 	kernel_is ge 5 0 0 && epatch "${FILESDIR}/${PV_MAJOR}-5.00-00-totalram_pages.patch"
 	kernel_is ge 5 0 0 && epatch "${FILESDIR}/${PV_MAJOR}-5.00-01-access_ok.patch"
 	kernel_is ge 5 0 0 && epatch "${FILESDIR}/${PV_MAJOR}-5.00-02-do_gettimeofday.patch"
+	kernel_is ge 5 0 0 && epatch "${FILESDIR}/${PV_MAJOR}-5.00-03-replace-SUBDIRS-with-M.patch"
+	kernel_is ge 5 3 0 && epatch "${FILESDIR}/${PV_MAJOR}-5.03-00-force_sig.patch"
+	kernel_is ge 5 4 0 && epatch "${FILESDIR}/${PV_MAJOR}-5.04-00-skb_frag_t.patch"
 	kernel_is ge 5 1 0 && epatch "${FILESDIR}/${PV_MAJOR}-5.01-00-vm_fault_t.patch"
 	kernel_is ge 5 1 0 && epatch "${FILESDIR}/${PV_MAJOR}-5.01-01-kernel_ds.patch"
 
