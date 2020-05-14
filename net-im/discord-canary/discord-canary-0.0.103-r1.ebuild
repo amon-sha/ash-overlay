@@ -46,7 +46,7 @@ src_install() {
 	local destdir="/opt/${PN}"
 
 	insinto $destdir
-	doins -r locales resources swiftshader *.pak *.png *.bin *.so
+	doins -r locales resources swiftshader *.dat *.pak *.png *.bin *.so
 
 	exeinto $destdir
 	doexe DiscordCanary
