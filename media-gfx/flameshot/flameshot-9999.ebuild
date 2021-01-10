@@ -1,55 +1,49 @@
-# Copyright 1999-2018 Gentoo Foundation
+# Copyright 2020 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
+EAPI=7
 
-inherit qmake-utils toolchain-funcs versionator
+inherit cmake-utils xdg-utils
 
-DESCRIPTION="Powerful yet simple to use screenshot software for GNU/Linux"
-HOMEPAGE="http://github.com/lupoDharkael/flameshot"
+DESCRIPTION="Powerful yet simple to use screenshot software"
+HOMEPAGE="https://flameshot.org"
 
+EGIT_REPO_URI="https://github.com/flameshot-org/${PN}"
 if [[ ${PV} == 9999 ]];then
 	inherit git-r3
-	EGIT_REPO_URI="${HOMEPAGE}"
 	SRC_URI=""
 	KEYWORDS=""
 else
-	SRC_URI="${HOMEPAGE}/archive/v${PV}.tar.gz -> ${P}.tar.gz"
-	KEYWORDS="~x86 ~amd64 ~arm"
+	SRC_URI="${EGIT_REPO_URI}/archive/v${PV}.tar.gz -> ${P}.tar.gz"
+	KEYWORDS="x86 amd64"
 fi
 
-LICENSE="FreeArt GPL-3+ Apache-2.0"
+LICENSE="FreeArt GPL-3 Apache-2.0"
 SLOT="0"
 IUSE=""
 
 DEPEND="
-	>=dev-qt/qtcore-5.3.0:5
-	>=dev-qt/qtdbus-5.3.0:5
-	>=dev-qt/qtnetwork-5.3.0:5
-	>=dev-qt/qtwidgets-5.3.0:5
-	>=dev-qt/linguist-tools-5.3.0:5
+	dev-qt/qtcore:5
+	dev-qt/qtgui:5
+	dev-qt/qtwidgets:5
+	dev-qt/qtsvg:5
+	dev-qt/qtnetwork:5
+	dev-qt/qtdbus:5
+	sys-apps/dbus
+"
+BDEPEND="
+	dev-qt/linguist-tools:5
 "
 RDEPEND="${DEPEND}"
 
-pkg_pretend(){
-	if tc-is-gcc && ! version_is_at_least 4.9.2 "$(gcc-version)" ;then
-		die "You need at least GCC 4.9.2 to build this package"
-	fi
+pkg_postinst() {
+	xdg_desktop_database_update
+	xdg_icon_cache_update
+	xdg_mimeinfo_database_update
 }
 
-src_prepare(){
-	[[ ${PV} != 9999 ]] && sed -i "s#\(VERSION = \).*#\1${PV}#" ${PN}.pro
-	sed -i "s#icons#pixmaps#" ${PN}.pro
-	sed -i "s#^Icon=.*#Icon=${PN}#" "docs/desktopEntry/package/${PN}.desktop" \
-		"docs/desktopEntry/package/${PN}-config.desktop" \
-		"docs/desktopEntry/package/${PN}-init.desktop"
-	eapply_user
-}
-
-src_configure(){
-	eqmake5 "CONFIG+=packaging" ${PN}.pro
-}
-
-src_install(){
-	emake INSTALL_ROOT="${D}" install
+pkg_postrm() {
+	xdg_desktop_database_update
+	xdg_icon_cache_update
+	xdg_mimeinfo_database_update
 }
