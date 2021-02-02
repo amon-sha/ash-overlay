@@ -3,7 +3,7 @@
 
 EAPI=5
 
-inherit eutils versionator readme.gentoo fdo-mime systemd gnome2-utils pam vmware-bundle
+inherit eutils versionator readme.gentoo xdg-utils systemd gnome2-utils pam vmware-bundle
 
 MY_PN="VMware-Workstation"
 MY_PV=$(get_version_component_range 1-3)
@@ -86,6 +86,7 @@ BUNDLED_LIB_DEPENDS="
 	dev-cpp/gtkmm:2.4
 	dev-libs/glib:2
 	dev-cpp/glibmm:2
+	x11-libs/libgksu
 "
 
 # vmware-workstation should not use virtual/libc as this is a
@@ -102,7 +103,6 @@ RDEPEND="
 	gnome-base/libgnomecanvas
 	gnome-base/libgtop:2
 	gnome-base/librsvg:2
-	gnome-base/orbit
 	media-libs/libart_lgpl
 	media-libs/libpng:1.2
 	media-libs/libpng
@@ -111,7 +111,6 @@ RDEPEND="
 	sys-devel/gcc
 	sys-libs/glibc
 	sys-libs/zlib
-	x11-libs/libgksu
 	x11-libs/libICE
 	x11-libs/libSM
 	x11-libs/libX11
@@ -120,7 +119,6 @@ RDEPEND="
 	x11-libs/libXi
 	x11-libs/libXtst
 	x11-libs/pango
-	x11-libs/pangox-compat
 	x11-libs/startup-notification
 	x11-themes/hicolor-icon-theme
 	!app-emulation/vmware-player
@@ -531,7 +529,7 @@ pkg_preinst() {
 }
 
 pkg_postinst() {
-	fdo-mime_desktop_database_update
+	xdg_desktop_database_update
 	gnome2_icon_cache_update
 	readme.gentoo_pkg_postinst
 }
@@ -542,6 +540,6 @@ pkg_prerm() {
 }
 
 pkg_postrm() {
-	fdo-mime_desktop_database_update
+	xdg_desktop_database_update
 	gnome2_icon_cache_update
 }
