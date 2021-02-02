@@ -104,8 +104,7 @@ RDEPEND="
 	gnome-base/libgtop:2
 	gnome-base/librsvg:2
 	media-libs/libart_lgpl
-	media-libs/libpng:1.2
-	media-libs/libpng
+	media-libs/libpng-compat:1.2
 	media-libs/tiff:3
 	cups? ( net-print/cups )
 	sys-devel/gcc
