@@ -42,10 +42,6 @@ RDEPEND="
 	)
 "
 
-PATCHES=(
-	"${FILESDIR}/9999-add_compiler_flags.patch"
-)
-
 RESTRICT="!test? ( test )"
 
 pkg_pretend () {
