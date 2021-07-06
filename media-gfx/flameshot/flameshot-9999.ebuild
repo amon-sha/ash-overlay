@@ -1,12 +1,12 @@
-# Copyright 2020 Gentoo Authors
+# Copyright 2021 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=7
 
-inherit cmake-utils xdg-utils
+inherit cmake desktop xdg
 
 DESCRIPTION="Powerful yet simple to use screenshot software"
-HOMEPAGE="https://flameshot.org"
+HOMEPAGE="https://flameshot.org https://github.com/flameshot-org/flameshot"
 
 EGIT_REPO_URI="https://github.com/flameshot-org/${PN}"
 if [[ ${PV} == 9999 ]];then
@@ -18,37 +18,42 @@ else
 	KEYWORDS="x86 amd64"
 fi
 
-LICENSE="FreeArt GPL-3 Apache-2.0"
+LICENSE="Apache-2.0 Free-Art-1.3 GPL-3+"
 SLOT="0"
 IUSE=""
 
 DEPEND="
 	dev-qt/qtcore:5
 	dev-qt/qtgui:5
+	=dev-qt/qtsingleapplication-2.6*[qt5(+),X]
 	dev-qt/qtwidgets:5
 	dev-qt/qtsvg:5
 	dev-qt/qtnetwork:5
 	dev-qt/qtdbus:5
 	sys-apps/dbus
+	dev-libs/spdlog
 "
 BDEPEND="
 	dev-qt/linguist-tools:5
 "
 RDEPEND="${DEPEND}"
-
 PATCHES=(
-        "${FILESDIR}/remove_shell_completions.patch"
+	"${FILESDIR}/remove_shell_completions.patch"
+	"${FILESDIR}/dont-force-ccache.patch"
 )
 
+src_prepare() {
+	rm -r external/spdlog || die
+	rm -r external/singleapplication || die
 
-pkg_postinst() {
-	xdg_desktop_database_update
-	xdg_icon_cache_update
-	xdg_mimeinfo_database_update
+	cmake_src_prepare
 }
 
-pkg_postrm() {
-	xdg_desktop_database_update
-	xdg_icon_cache_update
-	xdg_mimeinfo_database_update
+src_configure() {
+	local mycmakeargs=(
+		-DUSE_EXTERNAL_SPDLOG=1
+		-DUSE_EXTERNAL_SINGLEAPPLICATION=1
+	)
+
+	cmake_src_configure
 }
