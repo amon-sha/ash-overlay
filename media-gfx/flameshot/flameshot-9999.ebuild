@@ -3,22 +3,17 @@
 
 EAPI=7
 
-inherit cmake desktop xdg
+inherit cmake desktop xdg git-r3
 
 DESCRIPTION="Powerful yet simple to use screenshot software"
 HOMEPAGE="https://flameshot.org https://github.com/flameshot-org/flameshot"
 
 EGIT_REPO_URI="https://github.com/flameshot-org/${PN}"
-if [[ ${PV} == 9999 ]];then
-	inherit git-r3
-	SRC_URI=""
-	KEYWORDS=""
-else
-	SRC_URI="${EGIT_REPO_URI}/archive/v${PV}.tar.gz -> ${P}.tar.gz"
-	KEYWORDS="x86 amd64"
-fi
+SRC_URI=""
 
-LICENSE="Apache-2.0 Free-Art-1.3 GPL-3+"
+KEYWORDS=""
+
+LICENSE="GPL-3"
 SLOT="0"
 IUSE=""
 
