@@ -55,9 +55,9 @@ src_prepare() {
 src_configure() {
 	# trimesh not available in portage
 	local mycmakeargs=(
-	  -DCURA_BUILDTYPE="ebuild"
-	  -DCURA_VERSION=${PV}
-		-DCURA_NO_INSTALL_PLUGINS="AMFReader;Toolbox;TrimeshReader"
+		-DCURA_BUILDTYPE="ebuild"
+		-DCURA_VERSION=${PV}
+		-DCURA_NO_INSTALL_PLUGINS="AMFReader;TrimeshReader"
 		-DCURA_DEBUGMODE=$(usex debug)
 	)
 	cmake_src_configure
