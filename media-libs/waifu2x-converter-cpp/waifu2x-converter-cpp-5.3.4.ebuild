@@ -1,11 +1,11 @@
-# Copyright 1999-2019 Gentoo Foundation
+# Copyright 1999-2021 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=7
 
-inherit cmake-utils
+inherit cmake
 
-DESCRIPTION="Image Super-Resolution for anime-style-art using Deep Convolutional Neural Networks implementation in c++ using opencv"
+DESCRIPTION="Image Super-Resolution for anime-style-art using opencv"
 HOMEPAGE="https://github.com/DeadSix27/waifu2x-converter-cpp"
 
 if [[ ${PV} == *9999* ]]; then
@@ -14,12 +14,12 @@ if [[ ${PV} == *9999* ]]; then
 	KEYWORDS=""
 else
 	SRC_URI="https://github.com/DeadSix27/${PN}/archive/v${PV}.tar.gz -> ${PN}-${PV}.tar.gz"
-	KEYWORDS="~x86 ~amd64"
+	KEYWORDS="~amd64"
 fi
 
 LICENSE="MIT BSD BSD-2"
 SLOT="0"
-IUSE="cuda doc debug models opencl cpu_flags_x86_avx"
+IUSE="cuda debug models opencl cpu_flags_x86_avx"
 
 RDEPEND+="
 	>=media-libs/opencv-3.3.0
@@ -30,11 +30,11 @@ RDEPEND+="
 DEPEND="${RDEPEND}
 "
 
+PATCHES=( "${FILESDIR}/${PN}-fix-picojson.patch" )
 
 src_configure() {
 	local mycmakeargs=(
 		-DCMAKE_INSTALL_PREFIX="${EPREFIX}/usr"
-		-DINSTALL_DOCS="$(usex doc)"
 		-DINSTALL_MODELS="$(usex models)"
 		-DX86OPT="$(usex cpu_flags_x86_avx)"
 	)
@@ -55,7 +55,7 @@ src_configure() {
 		)
 	fi
 
-	cmake-utils_src_configure
+	cmake_src_configure
 }
 
 pkg_postinst() {
