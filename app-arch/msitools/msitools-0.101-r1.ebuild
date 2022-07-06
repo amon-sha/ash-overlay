@@ -38,6 +38,7 @@ DEPEND="${RDEPEND}
 
 PATCHES=(
 	"${FILESDIR}"/${PN}-disable-tests.patch
+	"${FILESDIR}"/${PN}-environment.patch
 )
 
 src_prepare() {
