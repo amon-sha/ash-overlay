@@ -1,21 +1,22 @@
-# Copyright 1999-2021 Gentoo Authors
+
+# Copyright 1999-2022 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=7
 inherit java-pkg-2 desktop
 
-GRADLE_DEP_VER="20210624"
+GRADLE_DEP_VER="20221104"
 
 DESCRIPTION="A software reverse engineering framework"
 HOMEPAGE="https://ghidra-sre.org/"
 SRC_URI="https://github.com/NationalSecurityAgency/${PN}/archive/Ghidra_${PV}_build.tar.gz
+	https://dev.pentoo.ch/~blshkv/distfiles/${PN}-dependencies-${GRADLE_DEP_VER}.tar.gz
 	https://github.com/pxb1988/dex2jar/releases/download/2.0/dex-tools-2.0.zip
 	https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/android4me/AXMLPrinter2.jar
 	https://sourceforge.net/projects/catacombae/files/HFSExplorer/0.21/hfsexplorer-0_21-bin.zip
-	mirror://sourceforge/yajsw/yajsw/yajsw-stable-12.12.zip
+	mirror://sourceforge/yajsw/yajsw/yajsw-stable-13.05.zip
 	https://dev.pentoo.ch/~blshkv/distfiles/cdt-8.6.0.zip
-	mirror://sourceforge/project/pydev/pydev/PyDev%206.3.1/PyDev%206.3.1.zip -> PyDev-6.3.1.zip
-	https://dev.pentoo.ch/~blshkv/distfiles/${PN}-dependencies-${GRADLE_DEP_VER}.tar.gz"
+	mirror://sourceforge/project/pydev/pydev/PyDev%206.3.1/PyDev%206.3.1.zip -> PyDev-6.3.1.zip"
 # run: "pentoo/scripts/gradle_dependencies.py buildGhidra" from "${S}" directory to generate dependencies
 #	https://www.eclipse.org/downloads/download.php?r=1&protocol=https&file=/tools/cdt/releases/8.6/cdt-8.6.0.zip
 
@@ -24,16 +25,40 @@ SLOT="0"
 KEYWORDS="amd64"
 IUSE=""
 
+#FIXME:
+# * QA Notice: Files built without respecting LDFLAGS have been detected
+# *  Please include the following list of files in your report:
+# * /usr/share/ghidra/GPL/DemanglerGnu/os/linux_x86_64/demangler_gnu_v2_24
+# * /usr/share/ghidra/GPL/DemanglerGnu/os/linux_x86_64/demangler_gnu_v2_33_1
+# * /usr/share/ghidra/Ghidra/Features/Decompiler/os/linux_x86_64/decompile
+# * /usr/share/ghidra/Ghidra/Features/Decompiler/os/linux_x86_64/sleigh
+
 #java-pkg-2 sets java based on RDEPEND so the java slot in rdepend is used to build
-RDEPEND="virtual/jre:11"
+RDEPEND="virtual/jre:17"
 DEPEND="${RDEPEND}
-	virtual/jdk:11
-	dev-java/gradle-bin:*
+	virtual/jdk:17
 	sys-devel/bison
 	dev-java/jflex
 	app-arch/unzip"
+BDEPEND=">=dev-java/gradle-bin-7.3:*"
 
 S="${WORKDIR}/ghidra-Ghidra_${PV}_build"
+
+pkg_setup() {
+	java-pkg-2_pkg_setup
+	# somehow this was unset on livecd run and it shouldn't be unset
+	eselect gradle update ifunset
+	gradle_link_target=$(readlink -n /usr/bin/gradle)
+	currentver="${gradle_link_target/gradle-bin-/}"
+	requiredver="7.3"
+	einfo "Gradle version ${currentver} currently set."
+	if [ "$(printf '%s\n' "$requiredver" "$currentver" | sort -V | head -n1)" = "$requiredver" ]; then
+		einfo "Gradle version ${currentver} is >= ${requiredver}, proceeding with build..."
+	else
+		eerror "Gradle version ${requiredver} or higher must be eselected before building ${PN}."
+		die "Please run 'eselect gradle set gradle-bin-XX' when XX is a version of gradle higher than ${requiredver}"
+	fi
+}
 
 src_unpack() {
 	# https://github.com/NationalSecurityAgency/ghidra/blob/master/DevGuide.md
@@ -50,7 +75,8 @@ src_unpack() {
 	cp lib/*.jar ./flatRepo            || die "(5) cp failed"
 
 	mkdir -p "${WORKDIR}"/ghidra.bin/Ghidra/Features/GhidraServer/ || die "(6) mkdir failed"
-	cp "${DISTDIR}"/yajsw-stable-12.12.zip "${WORKDIR}"/ghidra.bin/Ghidra/Features/GhidraServer/ || die "(7) cp failed"
+#	cp "${DISTDIR}"/yajsw-stable-12.12.zip "${WORKDIR}"/ghidra.bin/Ghidra/Features/GhidraServer/ || die "(7) cp failed"
+	cp "${DISTDIR}"/yajsw-stable-13.05.zip "${WORKDIR}"/ghidra.bin/Ghidra/Features/GhidraServer/ || die "(7) cp failed"
 
 	mkdir -p "${WORKDIR}"/ghidra.bin/GhidraBuild/EclipsePlugins/GhidraDev/buildDependencies/ || die "(8) mkdir failed"
 	cp "${DISTDIR}"/PyDev-6.3.1.zip "${WORKDIR}/ghidra.bin/GhidraBuild/EclipsePlugins/GhidraDev/buildDependencies/PyDev 6.3.1.zip" || die "(9) cp failed"
@@ -77,7 +103,7 @@ src_compile() {
 	export _JAVA_OPTIONS="$_JAVA_OPTIONS -Duser.home=$HOME -Djava.io.tmpdir=${T}"
 
 	GRADLE="gradle --gradle-user-home .gradle --console rich --no-daemon"
-	GRADLE="${GRADLE} --offline"
+	GRADLE="${GRADLE} --offline --parallel --max-workers $(nproc)"
 	unset TERM
 	${GRADLE} prepDev -x check -x test || die
 	${GRADLE} buildGhidra -x check -x test --parallel || die
@@ -91,8 +117,10 @@ src_compile() {
 src_install() {
 	#FIXME: it is easier to unpack existing archive for now
 	dodir /usr/share
-	unzip build/dist/ghidra_"${PV}"_DEV_linux64.zip -d "${ED}"/usr/share/ || die "unable to unpack dist zip"
+	unzip build/dist/ghidra_"${PV}"_DEV_linux_x86_64.zip -d "${ED}"/usr/share/ || die "unable to unpack dist zip"
 	mv "${ED}"/usr/share/ghidra_"${PV}"_DEV "${ED}"/usr/share/ghidra || die "mv failed"
+	# remove zip files which aren't needed at runtime
+	find "${ED}"/usr/share/ghidra -type f -name '*.zip' -exec rm -f {} +
 
 	#fixme: add doc flag
 	rm -r  "${ED}"/usr/share/ghidra/docs/ || die "rm failed"
@@ -102,5 +130,4 @@ src_install() {
 	doicon GhidraDocs/GhidraClass/Beginner/Images/GhidraLogo64.png
 	# desktop entry
 	make_desktop_entry ${PN} "Ghidra" /usr/share/pixmaps/GhidraLogo64.png "Utility"
-
 }
