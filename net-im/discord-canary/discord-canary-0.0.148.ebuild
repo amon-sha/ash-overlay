@@ -37,16 +37,15 @@ QA_PREBUILT="
 	opt/${PN}/libEGL.so
 	opt/${PN}/libGLESv2.so
 	opt/${PN}/libffmpeg.so
-	opt/${PN}/swiftshader/libEGL.so
-	opt/${PN}/swiftshader/libGLESv2.so
-	opt/${PN}/swiftshader/libvk_swiftshader.so
+	opt/${PN}/libvk_swiftshader.so
+	opt/${PN}/libvulkan.so.1
 "
 
 src_install() {
 	local destdir="/opt/${PN}"
 
 	insinto $destdir
-	doins -r locales resources swiftshader *.dat *.pak *.png *.bin *.so
+	doins -r locales resources *.dat *.pak *.png *.bin *.so *.so.* *.json
 
 	exeinto $destdir
 	doexe DiscordCanary
