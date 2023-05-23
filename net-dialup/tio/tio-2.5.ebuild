@@ -7,21 +7,18 @@ inherit meson bash-completion-r1
 
 DESCRIPTION="Simple TTY terminal application"
 HOMEPAGE="https://tio.github.io/"
-SRC_URI="
-	https://github.com/${PN}/${PN}/releases/download/v${PV}/${P}.tar.xz
-	https://github.com/benhoyt/inih/archive/refs/tags/r56.tar.gz -> inih-r56.tar.gz
-"
+SRC_URI="https://github.com/${PN}/${PN}/releases/download/v${PV}/${P}.tar.xz"
 
 SLOT="0"
 LICENSE="GPL-2+"
 KEYWORDS="~amd64 ~arm64 ~x86"
-RESTRICT="mirror"
 
-src_unpack() {
-	default
-
-	mv inih-r56 ${S}/subprojects/libinih
-}
+RDEPEND="
+	dev-libs/inih
+"
+DEPEND="
+	${RDEPEND}
+"
 
 src_configure() {
 	local emesonargs=(
