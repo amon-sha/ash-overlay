@@ -3,7 +3,7 @@
 
 EAPI=7
 
-inherit eutils desktop
+inherit desktop
 
 DESCRIPTION="All-in-one voice and text chat"
 HOMEPAGE="https://discordapp.com/"
