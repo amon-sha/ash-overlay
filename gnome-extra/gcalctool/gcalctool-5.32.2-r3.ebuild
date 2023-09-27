@@ -5,7 +5,7 @@
 EAPI="7"
 GNOME_TARBALL_SUFFIX="bz2"
 
-inherit gnome2 eutils
+inherit gnome2
 
 DESCRIPTION="A calculator application for GNOME"
 HOMEPAGE="http://live.gnome.org/Gcalctool http://calctool.sourceforge.net/"
