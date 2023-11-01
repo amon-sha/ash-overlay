@@ -3,7 +3,8 @@
 
 EAPI=8
 
-PYTHON_COMPAT=( python3_{9..10} )
+DISTUTILS_USE_PEP517=setuptools
+PYTHON_COMPAT=( python3_{10..12} )
 inherit distutils-r1
 
 DESCRIPTION="CLI for Postgres with auto-completion and syntax highlighting"
@@ -13,20 +14,21 @@ SRC_URI="https://github.com/dbcli/pgcli/archive/v${PV}.tar.gz -> ${P}.tar.gz"
 LICENSE="BSD MIT"
 SLOT="0"
 KEYWORDS="amd64 ~x86"
-IUSE="keyring"
+IUSE="keyring ssh"
 
 RDEPEND="
 	dev-python/click[${PYTHON_USEDEP}]
-	>=dev-python/cli_helpers-2.2.1[${PYTHON_USEDEP}]
+	>=dev-python/cli-helpers-2.2.1[${PYTHON_USEDEP}]
 	dev-python/configobj[${PYTHON_USEDEP}]
 	dev-python/pendulum[${PYTHON_USEDEP}]
 	dev-python/pgspecial[${PYTHON_USEDEP}]
 	dev-python/prompt-toolkit[${PYTHON_USEDEP}]
-	dev-python/psycopg:2[${PYTHON_USEDEP}]
+	dev-python/psycopg:0[${PYTHON_USEDEP}]
 	dev-python/pygments[${PYTHON_USEDEP}]
 	dev-python/setproctitle[${PYTHON_USEDEP}]
 	dev-python/sqlparse[${PYTHON_USEDEP}]
-	keyring? ( dev-python/keyring[${PYTHON_USEDEP}] )"
+	keyring? ( dev-python/keyring[${PYTHON_USEDEP}] )
+	ssh? ( dev-python/sshtunnel[${PYTHON_USEDEP}] )"
 BDEPEND="
 	test? (
 		dev-db/postgresql
