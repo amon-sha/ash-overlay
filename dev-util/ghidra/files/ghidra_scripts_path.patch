@@ -1,0 +1,13 @@
+diff --git a/GhidraBuild/EclipsePlugins/GhidraDev/GhidraDevPlugin/src/main/java/ghidradev/ghidraprojectcreator/utils/GhidraScriptUtils.java b/GhidraBuild/EclipsePlugins/GhidraDev/GhidraDevPlugin/src/main/java/ghidradev/ghidraprojectcreator/utils/GhidraScriptUtils.java
+index 3171c0e..1fa6dac 100644
+--- a/GhidraBuild/EclipsePlugins/GhidraDev/GhidraDevPlugin/src/main/java/ghidradev/ghidraprojectcreator/utils/GhidraScriptUtils.java
++++ b/GhidraBuild/EclipsePlugins/GhidraDev/GhidraDevPlugin/src/main/java/ghidradev/ghidraprojectcreator/utils/GhidraScriptUtils.java
+@@ -32,7 +32,7 @@ import ghidra.framework.GModule;
+ public class GhidraScriptUtils {
+ 
+ 	public static File userScriptsDir =
+-		new File(System.getProperty("user.home") + "/ghidra_scripts");
++		new File(System.getProperty("user.home") + "/.ghidra/scripts");
+ 
+ 	/**
+ 	 * Creates a new Ghidra script project with the given name.
