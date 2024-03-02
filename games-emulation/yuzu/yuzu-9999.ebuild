@@ -9,7 +9,8 @@ DESCRIPTION="An emulator for Nintendo Switch"
 HOMEPAGE="https://yuzu-emu.org"
 EGIT_REPO_URI="https://github.com/yuzu-emu/yuzu-mainline"
 EGIT_SUBMODULES=( '-*' 'dynarmic' 'sirit' 'xbyak' 'tzdb_to_nx' 'cpp-jwt' 'simpleini' 'enet'
-	              'externals/nx_tzdb/tzdb_to_nx/externals/tz/tz' 'VulkanMemoryAllocator' )
+	              'externals/nx_tzdb/tzdb_to_nx/externals/tz/tz' 'VulkanMemoryAllocator'
+	              'Vulkan-Utility-Libraries' )
 # Dynarmic is not intended to be generic, it is tweaked to fit emulated processor
 # TODO wait 'xbyak' waiting version bump. see #860816
 
@@ -25,7 +26,6 @@ RDEPEND="
 	>=dev-libs/inih-52
 	>=dev-libs/openssl-1.1:=
 	>=media-video/ffmpeg-4.3:=
-	>=net-libs/enet-1.3
 	app-arch/lz4:=
 	dev-libs/boost:=[context]
 	media-libs/opus
@@ -48,7 +48,6 @@ RDEPEND="
 "
 DEPEND="${RDEPEND}
 	dev-cpp/cpp-httplib
-	dev-cpp/cpp-jwt
 	system-vulkan? ( >=dev-util/vulkan-headers-1.3.274
 		dev-util/spirv-headers
 		x11-libs/libX11
@@ -57,7 +56,6 @@ DEPEND="${RDEPEND}
 "
 BDEPEND="
 	>=dev-cpp/nlohmann_json-3.8.0
-	dev-cpp/simpleini
 	dev-cpp/robin-map
 	dev-util/glslang
 	discord? ( >=dev-libs/rapidjson-1.1.0 )
