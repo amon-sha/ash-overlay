@@ -2,7 +2,7 @@ diff --git a/tools/wixl/builder.vala b/tools/wixl/builder.vala
 index 9e2490568346fd6bce3e89e0381238714070b442..46ae4b36066f8443263dbdd8a05ace43c2c72497 100644
 --- a/tools/wixl/builder.vala
 +++ b/tools/wixl/builder.vala
-@@ -179,6 +179,10 @@ namespace Wixl {
+@@ -256,6 +256,10 @@ namespace Wixl {
              }
              if (db.table_app_search.records.length () > 0)
                  add (MSIDefault.Action.AppSearch);
@@ -13,9 +13,9 @@ index 9e2490568346fd6bce3e89e0381238714070b442..46ae4b36066f8443263dbdd8a05ace43
              table.add_sorted_actions ();
  
              // InstallUISequence
-@@ -1146,6 +1150,82 @@ namespace Wixl {
-             media.Id = "1";
-             visit_media (media);
+@@ -1750,6 +1754,82 @@ namespace Wixl {
+ 
+             db.table_action_text.add (progress_text.Action, text.Text.strip(), progress_text.Template);
          }
 +
 +        enum EnvironmentAction {
@@ -100,9 +100,9 @@ diff --git a/tools/wixl/msi.vala b/tools/wixl/msi.vala
 index 077848117132d89afad9f9c67d62de936ad689f7..3ce70746721e28bfb64fc01190c3dabefb5d74e3 100644
 --- a/tools/wixl/msi.vala
 +++ b/tools/wixl/msi.vala
-@@ -720,6 +720,27 @@ namespace Wixl {
-         }
+@@ -1023,6 +1023,27 @@ namespace Wixl {
      }
+ 
  
 +    class MsiTableEnvironment: MsiTable {
 +            static construct {
@@ -128,15 +128,15 @@ index 077848117132d89afad9f9c67d62de936ad689f7..3ce70746721e28bfb64fc01190c3dabe
      class MsiSummaryInfo: Object {
          public Libmsi.SummaryInfo properties;
  
-@@ -818,6 +839,7 @@ namespace Wixl {
-         public MsiTableCreateFolder table_create_folder;
-         public MsiTableSignature table_signature;
-         public MsiTableFileHash table_file_hash;
+@@ -1135,6 +1156,7 @@ namespace Wixl {
+         public MsiTableControlCondition table_control_condition;
+         public MsiTableListBox table_list_box;
+         public MsiTableRadioButton table_radio_button;
 +        public MsiTableEnvironment table_environment;
  
          public HashTable<string, MsiTable> tables;
  
-@@ -884,6 +906,7 @@ namespace Wixl {
+@@ -1207,6 +1229,7 @@ namespace Wixl {
              table_reg_locator = new MsiTableRegLocator ();
              table_create_folder = new MsiTableCreateFolder ();
              table_file_hash = new MsiTableFileHash ();
@@ -144,7 +144,7 @@ index 077848117132d89afad9f9c67d62de936ad689f7..3ce70746721e28bfb64fc01190c3dabe
  
              foreach (var t in new MsiTable[] {
                      table_admin_execute_sequence,
-@@ -914,6 +937,7 @@ namespace Wixl {
+@@ -1240,6 +1263,7 @@ namespace Wixl {
                      table_reg_locator,
                      table_create_folder,
                      table_file_hash,
@@ -156,23 +156,23 @@ diff --git a/tools/wixl/wix.vala b/tools/wixl/wix.vala
 index 396c93a5b2c0456bc1e2d511ee36219d440dc98f..fb215f10bcc6ec4c8df775e511683dd4639cc3bd 100644
 --- a/tools/wixl/wix.vala
 +++ b/tools/wixl/wix.vala
-@@ -66,6 +66,7 @@ namespace Wixl {
-         public abstract void visit_binary (WixBinary binary) throws GLib.Error;
-         public abstract void visit_major_upgrade (WixMajorUpgrade major) throws GLib.Error;
-         public abstract void visit_media_template (WixMediaTemplate media) throws GLib.Error;
+@@ -78,6 +78,7 @@ namespace Wixl {
+         public abstract void visit_radio_button (WixRadioButton radio) throws GLib.Error;
+         public abstract void visit_subscribe (WixSubscribe subscribe) throws GLib.Error;
+         public abstract void visit_progress_text (WixProgressText progress_text) throws GLib.Error;
 +        public abstract void visit_environment (WixEnvironment env) throws GLib.Error;
      }
  
      public abstract class WixNode: Object {
-@@ -1058,6 +1059,7 @@ namespace Wixl {
-                 typeof (WixRegistryKey),
+@@ -1119,6 +1120,7 @@ namespace Wixl {
                  typeof (WixServiceControl),
                  typeof (WixServiceInstall),
-+                typeof (WixEnvironment)
+                 typeof (WixIniFile),
++                typeof (WixEnvironment),
              });
          }
  
-@@ -1153,4 +1155,23 @@ namespace Wixl {
+@@ -1482,4 +1484,23 @@ namespace Wixl {
          }
      }
  
