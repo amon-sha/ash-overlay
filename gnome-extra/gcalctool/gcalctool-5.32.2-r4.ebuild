@@ -4,6 +4,7 @@
 
 EAPI="7"
 GNOME_TARBALL_SUFFIX="bz2"
+GNOME2_EAUTORECONF=yes
 
 inherit gnome2
 
@@ -25,10 +26,10 @@ DEPEND="${RDEPEND}
 	sys-devel/gettext
 	>=dev-util/intltool-0.35
 	virtual/pkgconfig
-	>=app-text/gnome-doc-utils-0.3.2
 "
 PATCHES=(
 	"${FILESDIR}/${P}-missing-header.patch"
+	"${FILESDIR}/${P}-no-help.patch"
 )
 
 src_prepare() {

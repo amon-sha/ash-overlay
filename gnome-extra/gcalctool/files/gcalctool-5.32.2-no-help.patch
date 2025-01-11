@@ -1,0 +1,41 @@
+diff --git a/Makefile.am b/Makefile.am
+index e7cbc02..8417467 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1,4 +1,4 @@
+-SUBDIRS = po src data help
++SUBDIRS = po src data
+ 
+ DISTCLEANFILES = \
+        Makefile.in \
+diff --git a/configure.ac b/configure.ac
+index 49a574a..048a722 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -13,7 +13,6 @@ AM_PROG_CC_STDC
+ AC_HEADER_STDC
+ 
+ GLIB_GSETTINGS
+-GNOME_COMPILE_WARNINGS(maximum)
+ 
+ dnl ###########################################################################
+ dnl Dependencies
+@@ -80,12 +79,6 @@ dnl ###########################################################################
+ IT_PROG_INTLTOOL([0.35.0])
+ AC_SUBST(GETTEXT_PACKAGE, gcalctool)
+ 
+-dnl ###########################################################################
+-dnl Documentation
+-dnl ###########################################################################
+-
+-GNOME_DOC_INIT
+-
+ dnl ###########################################################################
+ dnl Files to generate
+ dnl ###########################################################################
+@@ -95,5 +95,4 @@ Makefile
+ src/Makefile
+ po/Makefile.in
+ data/Makefile
+-help/Makefile
+ ])
