@@ -1,4 +1,4 @@
-# Copyright 1999-2021 Gentoo Authors
+# Copyright 1999-2024 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=8
@@ -26,7 +26,7 @@ reiserfs static ufs vmfs xfs
 "
 
 RDEPEND="
-	dev-libs/openssl:*
+	dev-libs/openssl:=
 	e2fs? ( sys-fs/e2fsprogs )
 	btrfs? ( sys-apps/util-linux )
 	fuse? ( sys-fs/fuse:0 )
@@ -55,15 +55,16 @@ RDEPEND="
 DEPEND="
 	${RDEPEND}
 "
-DOCS=( AUTHORS ChangeLog HACKING NEWS README.md TODO )
-
-PATCHES=(
-	"${FILESDIR}/partclone-fail-mbr.patch"
-)
+DOCS=( AUTHORS ChangeLog HACKING IMAGE_FORMATS.md NEWS README.md )
 
 src_prepare() {
 	default
 	eautoreconf
+	append-cflags -fno-strict-aliasing
+	sed \
+		-e "s:\<gcc\>:$(tc-getBUILD_CC) ${CFLAGS}:" \
+		-e "s:\<objcopy\>:$(tc-getBUILD_OBJCOPY):" \
+		-i fail-mbr/compile-mbr.sh
 }
 
 src_configure() {
