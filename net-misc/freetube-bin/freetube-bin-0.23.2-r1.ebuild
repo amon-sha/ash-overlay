@@ -36,7 +36,7 @@ RDEPEND="
 	x11-libs/pango
 "
 
-src_configure() {
+src_unpack() {
 	unpack_deb "${DISTDIR}"/freetube_"${PV}"_amd64.deb
 }
 
@@ -45,7 +45,8 @@ src_install() {
 	insinto /opt
 	doins -r opt/*
 	domenu usr/share/applications/freetube.desktop
-	doicon -s scalable usr/share/icons/hicolor/scalable/apps/freetube.svg
+#	doicon -s scalable usr/share/icons/hicolor/scalable/apps/freetube.svg
+	doicon -s scalable "${FILESDIR}/freetube.svg"
 	fperms 4755 /opt/FreeTube/chrome-sandbox || die
 	fperms +x  /opt/FreeTube/freetube || die
 	dosym ../../opt/FreeTube/freetube /usr/bin/freetube-bin
