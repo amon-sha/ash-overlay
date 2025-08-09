@@ -3,11 +3,13 @@
 
 EAPI=7
 
+DEB="freetube_${PV}_beta_amd64.deb"
+
 inherit desktop unpacker xdg
 
 DESCRIPTION="https://github.com/FreeTubeApp/FreeTube"
 HOMEPAGE="https://freetubeapp.io/"
-SRC_URI="https://github.com/FreeTubeApp/FreeTube/releases/download/v${PV}-beta/freetube_${PV}_amd64.deb"
+SRC_URI="https://github.com/FreeTubeApp/FreeTube/releases/download/v${PV}-beta/${DEB}"
 
 S="${WORKDIR}"
 
@@ -37,7 +39,7 @@ RDEPEND="
 "
 
 src_unpack() {
-	unpack_deb "${DISTDIR}"/freetube_"${PV}"_amd64.deb
+	unpack_deb "${DISTDIR}/${DEB}"
 }
 
 src_install() {
