@@ -11,11 +11,29 @@ DESCRIPTION="A fancy custom distribution of Valves Proton with various patches"
 HOMEPAGE="https://github.com/GloriousEggroll/proton-ge-custom"
 SRC_URI="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${_internal_name}/${_internal_name}.tar.gz -> ${P}.tar.gz"
 LICENSE="BSD LGPL zlib MIT MPL OFL Proton GPL MSPL"
-SLOT="${PV}"
+SLOT="10"
 KEYWORDS="~amd64"
 RESTRICT="mirror strip"
 
 RDEPEND="
+	dev-libs/openssl-compat:1.1.1[${MULTILIB_USEDEP}]
+	dev-libs/libxml2-compat[${MULTILIB_USEDEP}]
+	media-video/ffmpeg-compat:4
+	<media-libs/libtheora-1.2[${MULTILIB_USEDEP}]
+	media-libs/gst-plugins-base[${MULTILIB_USEDEP}]
+	media-libs/graphene
+	media-libs/gst-plugins-bad
+	dev-libs/libgudev[${MULTILIB_USEDEP}]
+	media-libs/libjpeg-turbo[${MULTILIB_USEDEP}]
+	dev-libs/libusb[${MULTILIB_USEDEP}]
+	media-libs/libva[${MULTILIB_USEDEP}]
+	x11-libs/libvdpau[${MULTILIB_USEDEP}]
+	media-sound/mpg123[${MULTILIB_USEDEP}]
+	media-libs/speex[${MULTILIB_USEDEP}]
+	media-libs/openal[${MULTILIB_USEDEP}]
+	app-emulation/vkd3d-proton[${MULTILIB_USEDEP}]
+	net-libs/libsoup
+	dev-lang/python
 	media-libs/mesa[vulkan,${MULTILIB_USEDEP}]
 	media-libs/vulkan-loader[${MULTILIB_USEDEP}]"
 
@@ -26,7 +44,7 @@ src_install() {
 	insinto "/usr/share/steam/compatibilitytools.d/"
 	dodir "/usr/share/steam/compatibilitytools.d/${_internal_name}"
 	doins -r "${S}/${_internal_name}"
-	
+
 	sed -i "s%\"install_path\" \".\"%\"install_path\" \"/usr/share/steam/compatibilitytools.d/${_internal_name}\"%" "${D}/usr/share/steam/compatibilitytools.d/${_internal_name}/compatibilitytool.vdf" || die
 
 	# need to keep empty dirs or else failures occur when copying base prefix?
