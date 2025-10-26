@@ -27,8 +27,6 @@ PATCHES=(
 	# will use it at some point and try to access internet.
 	# Because it did not cause any issue, we can disable it
 	"${FILESDIR}/${P}_remove_dotnet.patch"
-	# Remove the different -Werror flags
-	"${FILESDIR}/${P}_remove_Werror.patch"
 )
 
 DEPEND="
@@ -45,7 +43,7 @@ DEPEND="
 	>=media-libs/glfw-3.4[X]
 	media-libs/glm
 	media-libs/libglvnd
-	net-libs/mbedtls:=
+	net-libs/mbedtls:0
 	net-misc/curl
 	sys-apps/file
 	sys-libs/zlib
