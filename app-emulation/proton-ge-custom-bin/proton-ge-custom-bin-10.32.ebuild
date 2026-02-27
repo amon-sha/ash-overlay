@@ -16,10 +16,10 @@ KEYWORDS="~amd64"
 RESTRICT="mirror strip"
 
 RDEPEND="
-	dev-libs/openssl-compat:1.1.1[${MULTILIB_USEDEP}]
 	dev-libs/libxml2-compat[${MULTILIB_USEDEP}]
+	dev-libs/openssl-compat:1.1.1[${MULTILIB_USEDEP}]
 	media-video/ffmpeg-compat:4
-	<media-libs/libtheora-1.2[${MULTILIB_USEDEP}]
+	media-libs/libtheora[${MULTILIB_USEDEP}]
 	media-libs/gst-plugins-base[${MULTILIB_USEDEP}]
 	media-libs/graphene
 	media-libs/gst-plugins-bad
