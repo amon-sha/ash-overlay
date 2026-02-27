@@ -1,9 +1,9 @@
-# Copyright 1999-2024 Gentoo Authors
+# Copyright 1999-2026 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=8
 
-LLVM_COMPAT=( {15..19} )
+LLVM_COMPAT=( {15..21} )
 
 inherit cmake llvm-r1 toolchain-funcs flag-o-matic xdg-utils
 
@@ -19,42 +19,56 @@ S_PATTERNS="${WORKDIR}/ImHex-Patterns-ImHex-v${PV}"
 LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="~amd64"
-IUSE="+system-llvm test lto +desktop-portal"
+IUSE="+system-llvm test lto +desktop-portal lz4"
 RESTRICT="!test? ( test )"
+
+# Skip cmake version detection, as there are a lot of dependencies
+# (that we do not use) that wants cmake < 3.5, so it prints a warning
+CMAKE_QA_COMPAT_SKIP=yes
 
 PATCHES=(
 	# If virtual/dotnet-sdk is installed on your system, then cmake
 	# will use it at some point and try to access internet.
 	# Because it did not cause any issue, we can disable it
-	"${FILESDIR}/${P}_remove_dotnet.patch"
+	"${FILESDIR}/remove_dotnet.patch"
+	# Correct the cmake MbedTLS search call
+	"${FILESDIR}/cmake_mbedtls.patch"
+	# Remove -Werror
+	"${FILESDIR}/remove_Werror.patch"
 )
+
+DOCS+=( LICENSE PLUGINS.md changelog.md )
 
 DEPEND="
 	app-arch/bzip2
 	app-arch/xz-utils
 	app-arch/zstd:=
-	app-forensics/yara:=
+	>=app-forensics/yara-4.2.0:=
 	>=dev-cpp/nlohmann_json-3.10.2
-	dev-libs/capstone:=
+	dev-libs/boost
+	>=dev-libs/capstone-5.0.3:=
+	<dev-libs/capstone-6
+	dev-libs/md4c
+	>=dev-libs/libfmt-11.0.2:=
 	>=dev-libs/nativefiledialog-extended-1.2.1[desktop-portal?]
-	>=dev-libs/libfmt-8.0.0:=
 	media-libs/fontconfig
 	media-libs/freetype
 	>=media-libs/glfw-3.4[X]
 	media-libs/glm
 	media-libs/libglvnd
-	net-libs/mbedtls:0
+	net-libs/mbedtls:=
 	net-misc/curl
 	sys-apps/file
-	sys-libs/zlib
+	virtual/zlib:=
 	virtual/libiconv
 	virtual/libintl
 "
 RDEPEND="${DEPEND}"
 BDEPEND="
-	system-llvm? ( llvm-core/llvm )
 	app-admin/chrpath
 	gnome-base/librsvg
+	lz4? ( app-arch/lz4 )
+	system-llvm? ( llvm-core/llvm )
 "
 
 pkg_pretend() {
@@ -79,8 +93,10 @@ src_configure() {
 		sed -ie "s/tests EXCLUDE_FROM_ALL/tests ALL/" "${S}/CMakeLists.txt"
 	fi
 
+	# The build hardening can be done by the user (by changing CFLAGS/CXXFLAGS)
+	# I need to disable system-llvm because on my system the llvm/Demangle/Demangle.h
+	# header was found by cmake, but not used during compilation, leading to errors (file not found)
 	local mycmakeargs=(
-		-D IMHEX_PLUGINS_IN_SHARE=OFF \
 		-D IMHEX_STRIP_RELEASE=OFF \
 		-D IMHEX_OFFLINE_BUILD=ON \
 		-D IMHEX_IGNORE_BAD_CLONE=ON \
@@ -94,15 +110,23 @@ src_configure() {
 		-D IMHEX_STRICT_WARNINGS=OFF \
 		-D IMHEX_STATIC_LINK_PLUGINS=OFF \
 		-D IMHEX_ENABLE_UNITY_BUILD=OFF \
+		-D IMHEX_BUILD_HARDENING=OFF \
 		-D IMHEX_ENABLE_STD_ASSERTS=OFF \
 		-D IMHEX_ENABLE_UNIT_TESTS=$(usex test) \
 		-D IMHEX_ENABLE_PRECOMPILED_HEADERS=OFF \
 		-D IMHEX_COMPRESS_DEBUG_INFO=OFF \
 		-D IMHEX_VERSION="${PV}" \
 		-D PROJECT_VERSION="${PV}" \
+		-D LIBPL_ENABLE_TESTS=$(usex test) \
+		-D LIBPL_ENABLE_EXAMPLE=ON \
+		-D LIBWOLV_ENABLE_TESTS=$(usex test) \
+		-D LIBWOLV_ENABLE_EXAMPLES=ON \
+		-D USE_SYSTEM_BOOST=ON \
 		-D USE_SYSTEM_CAPSTONE=ON \
 		-D USE_SYSTEM_FMT=ON \
-		-D USE_SYSTEM_LLVM=$(usex system-llvm) \
+		-D USE_SYSTEM_LLVM=OFF \
+		# -D USE_SYSTEM_LLVM=$(usex system-llvm) \
+		-D USE_SYSTEM_MD4C=ON \
 		-D USE_SYSTEM_NFD=ON \
 		-D USE_SYSTEM_NLOHMANN_JSON=ON \
 		-D USE_SYSTEM_YARA=ON \
