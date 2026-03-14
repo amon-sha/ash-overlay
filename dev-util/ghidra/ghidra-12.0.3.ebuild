@@ -1,12 +1,15 @@
-# Copyright 1999-2024 Gentoo Authors
+# Copyright 2026 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=8
-inherit java-pkg-2 desktop
+PYTHON_COMPAT=( python3_{12..14} )
+inherit java-pkg-2 desktop python-single-r1
 
-GRADLE_DEP_VER="20240928"
+GRADLE_DEP_VER="20260215"
+# Ghidra/application.properties
 GRADLE_VER="8.5"
-RELEASE_VERSION=${PV}
+
+RELEASE_VERSION="12.0"   #${PV}
 
 DESCRIPTION="A software reverse engineering framework"
 HOMEPAGE="https://ghidra-sre.org/"
@@ -15,17 +18,25 @@ HOMEPAGE="https://ghidra-sre.org/"
 FIDB_FILES="vs2012_x86.fidb vs2012_x64.fidb vs2015_x86.fidb vs2015_x64.fidb \
 vs2017_x86.fidb vs2017_x64.fidb vs2019_x86.fidb vs2019_x64.fidb vsOlder_x86.fidb vsOlder_x64.fidb"
 
+Z3_VER="4.13.0"
+#Z3_ARM64_OSX_VER = "11.0"
+#Z3_X64_OSX_VER = "11.7.10"
+Z3_X64_GLIBC_VER="2.31"
+Z3_NAME="z3-${Z3_VER}-x64-glibc-${Z3_X64_GLIBC_VER}"
 # ./gradle/support/fetchDependencies.gradle
-SRC_URI="https://github.com/NationalSecurityAgency/${PN}/archive/Ghidra_${PV}_build.tar.gz
+#        https://github.com/NationalSecurityAgency/ghidra/archive/refs/tags/Ghidra_11.4_build.tar.gz
+SRC_URI="https://github.com/NationalSecurityAgency/${PN}/archive/refs/tags/Ghidra_${PV}_build.tar.gz
 	https://dev.pentoo.ch/~blshkv/distfiles/${PN}-dependencies-${GRADLE_DEP_VER}.tar.gz
-	https://github.com/pxb1988/dex2jar/releases/download/v2.1/dex2jar-2.1.zip
-	https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/android4me/AXMLPrinter2.jar
-	https://sourceforge.net/projects/catacombae/files/HFSExplorer/0.21/hfsexplorer-0_21-bin.zip
-	https://downloads.sourceforge.net/yajsw/yajsw/yajsw-stable-13.12.zip
-	https://ftp.postgresql.org/pub/source/v15.3/postgresql-15.3.tar.gz
+	https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
+	https://github.com/NationalSecurityAgency/ghidra-data/raw/Ghidra_${RELEASE_VERSION}/Debugger/dbgmodel.tlb
+	https://github.com/digitalsleuth/AXMLPrinter2/raw/691036a3caf84950fbb0df6f1fa98d7eaa92f2a0/AXMLPrinter2.jar
+	https://github.com/unsound/hfsexplorer/releases/download/hfsexplorer-0.21/hfsexplorer-0_21-bin.zip
+	https://downloads.sourceforge.net/yajsw/yajsw/yajsw-stable-13.18.zip
+	https://ftp.postgresql.org/pub/source/v15.10/postgresql-15.10.tar.gz
 	https://archive.eclipse.org/tools/cdt/releases/8.6/cdt-8.6.0.zip
-	https://downloads.sourceforge.net/pydev/pydev/PyDev%206.3.1/PyDev%206.3.1.zip -> PyDev-6.3.1.zip
+	https://sourceforge.net/projects/pydev/files/pydev/PyDev%209.3.0/PyDev%209.3.0.zip -> PyDev-9.3.0.zip
 	https://github.com/NationalSecurityAgency/ghidra-data/raw/Ghidra_${RELEASE_VERSION}/lib/java-sarif-2.1-modified.jar
+	https://github.com/Z3Prover/z3/releases/download/z3-${Z3_VER}/${Z3_NAME}.zip
 "
 for FIDB in ${FIDB_FILES}; do
 	SRC_URI+=" https://github.com/NationalSecurityAgency/ghidra-data/raw/Ghidra_${RELEASE_VERSION}/FunctionID/${FIDB}"
@@ -65,27 +76,45 @@ PATCHES=(
 	"${FILESDIR}/launch_properties_xrender_false.patch"
 )
 
+# FIXME:
+# build fails with system-vm jdk-25, see:
+# https://github.com/gradle/gradle/issues/35111
+# java-pkg-2 does not set it for some reason
+JAVA_PKG_WANT_SOURCE="21"
+JAVA_PKG_WANT_TARGET="21"
+
+REQUIRED_USE=${PYTHON_REQUIRED_USE}
 #java-pkg-2 sets java based on RDEPEND so the java slot in rdepend is used to build
-RDEPEND=">=virtual/jre-21:*"
+#>=virtual/jdk-21:*
+RDEPEND="virtual/jre:21
+		${PYTHON_DEPS}"
 DEPEND="${RDEPEND}
-	>=virtual/jdk-21:*
+	virtual/jdk:21
 	sys-devel/bison
 	dev-java/jflex
-	app-arch/unzip
-	dev-python/pip"
-BDEPEND=">=dev-java/gradle-bin-${GRADLE_VER}:*"
+	app-arch/unzip"
+BDEPEND=">=dev-java/gradle-bin-${GRADLE_VER}:* <dev-java/gradle-bin-9.0.0
+		dev-python/pip"
 
 check_gradle_binary() {
 	gradle_link_target=$(readlink -n /usr/bin/gradle)
 	currentver="${gradle_link_target/gradle-bin-/}"
 	requiredver="${GRADLE_VER}"
 	einfo "Gradle version ${currentver} currently set."
-	if [ "$(printf '%s\n' "$requiredver" "$currentver" | sort -V | head -n1)" = "$requiredver" ]; then
+	if [ "$(echo ${currentver} | cut -d. -f1)" -ge "9" ]; then
+		eerror "Selected gradle version ${currentver} is too high. It must be eselected before building ${PN}."
+		die "Please run 'eselect gradle set gradle-bin-XX' when XX is a version of gradle lower than 9."
+	elif [ "$(printf '%s\n' "$requiredver" "$currentver" | sort -V | head -n1)" = "$requiredver" ]; then
 		einfo "Gradle version ${currentver} is >= ${requiredver}, proceeding with build..."
 	else
 		eerror "Gradle version ${requiredver} or higher must be eselected before building ${PN}."
 		die "Please run 'eselect gradle set gradle-bin-XX' when XX is a version of gradle higher than ${requiredver}"
 	fi
+}
+
+pkg_setup() {
+	java-pkg-2_pkg_setup
+	python-single-r1_pkg_setup
 }
 
 src_unpack() {
@@ -98,8 +127,8 @@ src_unpack() {
 	mkdir -p "${S}/.gradle/flatRepo" || die "(1) mkdir failed"
 	cd "${S}/.gradle"
 
-	unpack dex2jar-2.1.zip
-	cp dex-tools-2.1/lib/dex-*.jar ./flatRepo || die "(2) cp failed"
+	unpack dex-tools-v2.4.zip
+	cp dex-tools-v2.4/lib/dex-*.jar ./flatRepo || die "(2) cp failed"
 
 	cp "${DISTDIR}/AXMLPrinter2.jar" ./flatRepo  || die "(3) cp failed"
 	cp "${DISTDIR}/java-sarif-2.1-modified.jar" ./flatRepo  || die "(4) cp failed"
@@ -108,31 +137,40 @@ src_unpack() {
 	cp lib/*.jar ./flatRepo            || die "(5) cp failed"
 
 	mkdir -p "${WORKDIR}"/ghidra.bin/Ghidra/Features/GhidraServer/ || die "(6) mkdir failed"
-	cp "${DISTDIR}"/yajsw-stable-13.12.zip "${WORKDIR}"/ghidra.bin/Ghidra/Features/GhidraServer/ || die "(7) cp failed"
+	cp "${DISTDIR}"/yajsw-stable-13.18.zip "${WORKDIR}"/ghidra.bin/Ghidra/Features/GhidraServer/ || die "(7) cp failed"
 
 	PLUGIN_DEP_PATH="ghidra.bin/GhidraBuild/EclipsePlugins/GhidraDev/buildDependencies"
 	mkdir -p "${WORKDIR}/${PLUGIN_DEP_PATH}/" || die "(8) mkdir failed"
-	cp "${DISTDIR}"/PyDev-6.3.1.zip "${WORKDIR}/${PLUGIN_DEP_PATH}/PyDev 6.3.1.zip" || die "(9) cp failed"
+	cp "${DISTDIR}"/PyDev-9.3.0.zip "${WORKDIR}/${PLUGIN_DEP_PATH}/PyDev 9.3.0.zip" || die "(9) cp failed"
 	cp "${DISTDIR}"/cdt-8.6.0.zip   "${WORKDIR}/${PLUGIN_DEP_PATH}/" || die "(10) cp failed"
-	cp "${DISTDIR}"/postgresql-15.3.tar.gz   "${WORKDIR}/${PLUGIN_DEP_PATH}/" || die "(10) cp failed"
+	cp "${DISTDIR}"/postgresql-15.10.tar.gz   "${WORKDIR}/${PLUGIN_DEP_PATH}/" || die "(10) cp failed"
+
+	unpack ${Z3_NAME}.zip
+	mkdir -p ./dependencies/SymbolicSummaryZ3/os/linux_x86_64
+	cp ${Z3_NAME}/bin/libz3*.so ./dependencies/SymbolicSummaryZ3/os/linux_x86_64 || die "(11) cp failed"
+	cp ${Z3_NAME}/bin/*.jar ./flatRepo || die "(12) cp failed"
 
 	cd "${S}"
 	mv ../dependencies .
 
 	mkdir ./dependencies/fidb || die "failed to create fidb dir"
-	cp "${DISTDIR}/${FIDB_FILES}" ./dependencies/fidb/
+	for FIDB in ${FIDB_FILES}; do
+		cp "${DISTDIR}/${FIDB}" ./dependencies/fidb/ || die
+	done
 
 	#copy whl
 	mkdir -p ./dependencies/{Debugger-rmi-trace,Debugger-agent-dbgeng} || die "failed to create Debugger dir"
-	cp "${DISTDIR}"/protobuf-3.20.3-py2.py3-none-any.whl ./dependencies/Debugger-rmi-trace/
-	cp "${DISTDIR}"/psutil-5.9.8.tar.gz ./dependencies/Debugger-rmi-trace/
-	cp "${DISTDIR}"/setuptools-68.0.0-py3-none-any.whl ./dependencies/Debugger-rmi-trace/
-	cp "${DISTDIR}"/wheel-0.37.1-py2.py3-none-any.whl ./dependencies/Debugger-rmi-trace/
+	cp "${DISTDIR}"/protobuf-3.20.3-py2.py3-none-any.whl ./dependencies/Debugger-rmi-trace/ || die
+	cp "${DISTDIR}"/psutil-5.9.8.tar.gz ./dependencies/Debugger-rmi-trace/ || die
+	cp "${DISTDIR}"/setuptools-68.0.0-py3-none-any.whl ./dependencies/Debugger-rmi-trace/ || die
+	cp "${DISTDIR}"/wheel-0.37.1-py2.py3-none-any.whl ./dependencies/Debugger-rmi-trace/ || die
 
-	cp "${DISTDIR}"/Pybag-2.2.12-py3-none-any.whl ./dependencies/Debugger-agent-dbgeng/
-	cp "${DISTDIR}"/capstone-5.0.1-py3-none-win_amd64.whl ./dependencies/Debugger-agent-dbgeng/
-	cp "${DISTDIR}"/comtypes-1.4.1-py3-none-any.whl ./dependencies/Debugger-agent-dbgeng/
-	cp "${DISTDIR}"/pywin32-306-cp312-cp312-win_amd64.whl ./dependencies/Debugger-agent-dbgeng/
+	cp "${DISTDIR}"/Pybag-2.2.12-py3-none-any.whl ./dependencies/Debugger-agent-dbgeng/ || die
+	cp "${DISTDIR}"/capstone-5.0.1-py3-none-win_amd64.whl ./dependencies/Debugger-agent-dbgeng/ || die
+	cp "${DISTDIR}"/comtypes-1.4.1-py3-none-any.whl ./dependencies/Debugger-agent-dbgeng/ || die
+	cp "${DISTDIR}"/pywin32-306-cp312-cp312-win_amd64.whl ./dependencies/Debugger-agent-dbgeng/ || die
+
+	cp "${DISTDIR}"/dbgmodel.tlb ./dependencies/Debugger-agent-dbgeng/ || die
 
 }
 
@@ -144,6 +182,14 @@ src_prepare() {
 	sed -i "s|_\${rootProject.BUILD_DATE_SHORT}||g" gradle/root/distribution.gradle || die "(13) sed failed"
 	#10.0 workaround
 	ln -s ../.gradle/flatRepo ./dependencies/flatRepo
+
+	# First attempt at disabling pip
+	#sed -i 's#pip#echo#' Ghidra/Features/PyGhidra/build.gradle || die
+
+	# Use the correct python version
+	# https://github.com/pentoo/pentoo-overlay/issues/2243
+	#sed -i "s/findPython3\(true\)/\"${EPYTHON}\"/" build.gradle || die
+	sed -i "s/findPython3(true)/\"${EPYTHON}\"/" build.gradle || die
 
 	eapply_user
 }
@@ -176,6 +222,12 @@ src_install() {
 	fperms +x /usr/share/ghidra/support/launch.sh
 	fperms +x /usr/share/ghidra/GPL/DemanglerGnu/os/linux_x86_64/demangler_gnu_v2_41
 	fperms +x /usr/share/ghidra/Ghidra/Features/Decompiler/os/linux_x86_64/decompile
+	shopt -s nullglob
+	# cd to install dir so the globbing works even when Ghidra isn't installed already
+	pushd "${ED}"
+	fperms +x usr/share/ghidra/Ghidra/Debug/Debugger-*/data/{debugger-launchers,support}/*.sh
+	popd
+	shopt -u nullglob
 
 	dosym -r /usr/share/ghidra/ghidraRun /usr/bin/ghidra
 
