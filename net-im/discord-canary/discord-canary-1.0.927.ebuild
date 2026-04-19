@@ -33,24 +33,16 @@ RDEPEND="
 S=${WORKDIR}/DiscordCanary
 
 QA_PREBUILT="
-	opt/${PN}/DiscordCanary
-	opt/${PN}/libEGL.so
-	opt/${PN}/libGLESv2.so
-	opt/${PN}/libffmpeg.so
-	opt/${PN}/libvk_swiftshader.so
-	opt/${PN}/libvulkan.so.1
+	opt/${PN}/updater_bootstrap
 "
 
 src_install() {
 	local destdir="/opt/${PN}"
 
-	insinto $destdir
-	doins -r locales resources *.dat *.pak *.png *.bin *.so *.so.* *.json
-
 	exeinto $destdir
-	doexe DiscordCanary
+	doexe updater_bootstrap discord-canary
 
-	dosym $destdir/DiscordCanary "/usr/bin/${PN}"
+	dosym $destdir/discord-canary "/usr/bin/${PN}"
 	make_desktop_entry "${PN}" "Discord Canary" \
 		"/opt/${PN}/discord.png" \
 		Network
