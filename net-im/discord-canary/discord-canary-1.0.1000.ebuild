@@ -39,6 +39,9 @@ QA_PREBUILT="
 src_install() {
 	local destdir="/opt/${PN}"
 
+	insinto $destdir
+	doins -r discord.png
+
 	exeinto $destdir
 	doexe updater_bootstrap discord-canary
 
