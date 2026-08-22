@@ -5,11 +5,11 @@ EAPI=8
 PYTHON_COMPAT=( python3_{12..14} )
 inherit java-pkg-2 desktop python-single-r1
 
-GRADLE_DEP_VER="20260215"
+GRADLE_DEP_VER="20260606"
 # Ghidra/application.properties
 GRADLE_VER="8.5"
 
-RELEASE_VERSION="12.0"   #${PV}
+RELEASE_VERSION="12.1"   #${PV}
 
 DESCRIPTION="A software reverse engineering framework"
 HOMEPAGE="https://ghidra-sre.org/"
@@ -70,11 +70,6 @@ KEYWORDS="amd64"
 # * /usr/share/ghidra/Ghidra/Features/Decompiler/os/linux_x86_64/sleigh
 # * /usr/share/ghidra/Ghidra/Features/FileFormats/data/sevenzipnativelibs/Linux-amd64/lib7-Zip-JBinding.so
 # * /usr/share/ghidra/Ghidra/Features/FileFormats/os/linux_x86_64/lzfse
-
-PATCHES=(
-	"${FILESDIR}/hidra_scripts_path.patch"
-	"${FILESDIR}/launch_properties_xrender_false.patch"
-)
 
 # FIXME:
 # build fails with system-vm jdk-25, see:
@@ -190,6 +185,9 @@ src_prepare() {
 	# https://github.com/pentoo/pentoo-overlay/issues/2243
 	#sed -i "s/findPython3\(true\)/\"${EPYTHON}\"/" build.gradle || die
 	sed -i "s/findPython3(true)/\"${EPYTHON}\"/" build.gradle || die
+
+	eapply "${FILESDIR}/ghidra_scripts_path.patch"
+	eapply "${FILESDIR}/launch_properties_xrender_false.patch"
 
 	eapply_user
 }
