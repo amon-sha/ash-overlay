@@ -9,7 +9,7 @@ inherit multilib-minimal
 _internal_name=GE-Proton${PV/./-}
 DESCRIPTION="A fancy custom distribution of Valves Proton with various patches"
 HOMEPAGE="https://github.com/GloriousEggroll/proton-ge-custom"
-SRC_URI="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${_internal_name}/${_internal_name}.tar.gz -> ${P}.tar.gz"
+SRC_URI="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${_internal_name}/${_internal_name}-x86_64.tar.gz -> ${P}.tar.gz"
 LICENSE="BSD LGPL zlib MIT MPL OFL Proton GPL MSPL"
 SLOT="11"
 KEYWORDS="~amd64"
@@ -38,12 +38,16 @@ RDEPEND="
 	media-libs/vulkan-loader[${MULTILIB_USEDEP}]"
 
 QA_PREBUILT={*}
-S="${WORKDIR}"
+S="${WORKDIR}/${_internal_name}-x86_64"
+
+PATCHES=(
+	"${FILESDIR}/disable_dodevices_symlinks.patch"
+)
 
 src_install() {
-	insinto "/usr/share/steam/compatibilitytools.d/"
 	dodir "/usr/share/steam/compatibilitytools.d/${_internal_name}"
-	doins -r "${S}/${_internal_name}"
+	insinto "/usr/share/steam/compatibilitytools.d/${_internal_name}"
+	doins -r "${S}/."
 
 	sed -i "s%\"install_path\" \".\"%\"install_path\" \"/usr/share/steam/compatibilitytools.d/${_internal_name}\"%" "${D}/usr/share/steam/compatibilitytools.d/${_internal_name}/compatibilitytool.vdf" || die
 

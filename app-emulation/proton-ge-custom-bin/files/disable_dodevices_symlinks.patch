@@ -1,0 +1,23 @@
+diff --git a/proton b/proton
+index e0a2d46..f780c02 100755
+--- a/proton
++++ b/proton
+@@ -1145,10 +1145,6 @@ class CompatData:
+                 os.makedirs(f"{self.prefix_dir}/dosdevices", exist_ok=True)
+                 os.symlink("../drive_c", self.prefix_dir + "/dosdevices/c:")
+ 
+-            if not file_exists(self.prefix_dir + "/dosdevices/z:", follow_symlinks=False):
+-                os.makedirs(f"{self.prefix_dir}/dosdevices", exist_ok=True)
+-                os.symlink("/", self.prefix_dir + "/dosdevices/z:")
+-
+             # collect configuration info
+             steamdir = os.environ["STEAM_COMPAT_CLIENT_INSTALL_PATH"]
+ 
+@@ -2737,7 +2733,6 @@ if __name__ == "__main__":
+ 
+     # protonfixes execution
+     protonfixes.setup(g_session.env, "PATH", ld_path_var, prepend_to_env_str)
+-    protonfixes.setup_mount_drives(setup_dir_drive)
+     protonfixes.winetricks(g_session.env, g_proton.wine_bin, g_proton.wineserver_bin)
+     # HACK: handle DXVK_FRAME_RATE and VKD3D_FRAME_RATE through DXVK_CONFIG
+     protonfixes.setup_frame_rate(g_session.env, append_to_env_str)
