@@ -13,11 +13,7 @@ inherit chromium-2 desktop rpm xdg
 
 DESCRIPTION="Unofficial Microsoft Teams client for Linux. Binary precompiled version."
 HOMEPAGE="https://github.com/IsmaelMartinez/teams-for-linux"
-SRC_URI="
-	amd64? ( https://github.com/IsmaelMartinez/${PN}/releases/download/v${PV}/${P}.x86_64.rpm )
-	arm? ( https://github.com/IsmaelMartinez/${PN}/releases/download/v${PV}/${P}.armv7l.rpm )
-	arm64? ( https://github.com/IsmaelMartinez/${PN}/releases/download/v${PV}/${P}.aarch64.rpm )
-"
+SRC_URI="https://github.com/IsmaelMartinez/${PN}/releases/download/v${PV}/${P}.x86_64.rpm"
 S="${WORKDIR}"
 
 LICENSE="GPL-3"
@@ -27,7 +23,7 @@ LICENSE+="
 	unRAR OFL-1.1 CC-BY-SA-3.0 MPL-2.0 android public-domain all-rights-reserved
 "
 SLOT="0"
-KEYWORDS="-* ~amd64 ~arm ~arm64"
+KEYWORDS="-* ~amd64"
 RESTRICT="bindist mirror"
 
 RDEPEND="
